@@ -8,6 +8,7 @@ export interface PhotoSession {
   beforePhoto: string | null;
   afterPhoto: string | null;
   aiAnalysis: string | null;
+  beforeLandmarks: import("./CameraCapture").FaceNodes | null;
 }
 
 interface Props {

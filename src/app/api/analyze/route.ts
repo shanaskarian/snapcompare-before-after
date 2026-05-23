@@ -39,10 +39,14 @@ Important: Never make medical claims or diagnoses. Only describe visual observat
 
 export async function POST(req: NextRequest) {
   try {
-    const { beforePhoto, afterPhoto, apiKey, provider } = await req.json();
+    const { beforePhoto, afterPhoto } = await req.json();
 
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: "API key required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "AI analysis is not configured. Please set the GEMINI_API_KEY environment variable." },
+        { status: 500 }
+      );
     }
 
     if (!beforePhoto || !afterPhoto) {
@@ -56,21 +60,7 @@ export async function POST(req: NextRequest) {
     const beforeBase64 = beforePhoto.split(",")[1];
     const afterBase64 = afterPhoto.split(",")[1];
 
-    let analysis: string;
-
-    if (provider === "openai") {
-      analysis = await analyzeWithOpenAI(
-        apiKey,
-        beforeBase64,
-        afterBase64
-      );
-    } else {
-      analysis = await analyzeWithGemini(
-        apiKey,
-        beforeBase64,
-        afterBase64
-      );
-    }
+    const analysis = await analyzeWithGemini(apiKey, beforeBase64, afterBase64);
 
     return NextResponse.json({ analysis });
   } catch (err: any) {
@@ -133,60 +123,5 @@ async function analyzeWithGemini(
   return (
     data.candidates?.[0]?.content?.parts?.[0]?.text ||
     "No analysis generated."
-  );
-}
-
-async function analyzeWithOpenAI(
-  apiKey: string,
-  beforeBase64: string,
-  afterBase64: string
-): Promise<string> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Please analyze these two patient photos. The first image is the BEFORE photo, and the second is the AFTER photo. Provide a comprehensive analysis covering photo quality, lighting, positioning, and any visible changes.",
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:image/jpeg;base64,${beforeBase64}`,
-                detail: "high",
-              },
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:image/jpeg;base64,${afterBase64}`,
-                detail: "high",
-              },
-            },
-          ],
-        },
-      ],
-      max_tokens: 2048,
-      temperature: 0.3,
-    }),
-  });
-
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(`OpenAI API error (${response.status}): ${errBody}`);
-  }
-
-  const data = await response.json();
-  return (
-    data.choices?.[0]?.message?.content || "No analysis generated."
   );
 }

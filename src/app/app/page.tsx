@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import CameraCapture from "@/components/CameraCapture";
+import CameraCapture, { type FaceNodes } from "@/components/CameraCapture";
 import ComparisonSlider from "@/components/ComparisonSlider";
 import SessionManager, { type PhotoSession } from "@/components/SessionManager";
 import AIAnalysis from "@/components/AIAnalysis";
@@ -14,11 +14,12 @@ export default function AppPage() {
   const [captureMode, setCaptureMode] = useState<"before" | "after">("before");
   const [isRetaking, setIsRetaking] = useState(false);
 
-  const handlePhotoCapture = (photoDataUrl: string) => {
+  const handlePhotoCapture = (photoDataUrl: string, landmarks: FaceNodes | null) => {
     if (!currentSession) return;
     const updated = { ...currentSession };
     if (captureMode === "before") {
       updated.beforePhoto = photoDataUrl;
+      updated.beforeLandmarks = landmarks;
     } else {
       updated.afterPhoto = photoDataUrl;
     }
@@ -54,6 +55,7 @@ export default function AppPage() {
       beforePhoto: null,
       afterPhoto: null,
       aiAnalysis: null,
+      beforeLandmarks: null,
     };
     setCurrentSession(session);
     setCaptureMode("before");
@@ -131,7 +133,7 @@ export default function AppPage() {
       {/* Main */}
       <main className="flex-1 overflow-auto">
         {view === "sessions" && <SessionManager onNewSession={startNewSession} onLoadSession={loadSession} />}
-        {view === "capture" && currentSession && <CameraCapture mode={captureMode} existingBefore={currentSession.beforePhoto} onCapture={handlePhotoCapture} />}
+        {view === "capture" && currentSession && <CameraCapture mode={captureMode} existingBefore={currentSession.beforePhoto} beforeLandmarks={currentSession.beforeLandmarks ?? null} onCapture={handlePhotoCapture} />}
         {view === "compare" && currentSession?.beforePhoto && currentSession?.afterPhoto && (
           <div style={{ padding: "24px", maxWidth: "800px", margin: "0 auto" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
