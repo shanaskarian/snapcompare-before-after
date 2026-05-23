@@ -55,95 +55,184 @@ interface AnalysisResult {
   };
 }
 
-// Injection point positions as percentages relative to face bounding box
-// These are approximate anatomical positions for visualization
-const INJECTION_ZONES: Record<string, { label: string; color: string; positions: [number, number][] }> = {
-  forehead: {
-    label: "Forehead",
-    color: "#FF6B6B",
-    positions: [
-      [0.30, 0.12], [0.40, 0.10], [0.50, 0.09], [0.60, 0.10], [0.70, 0.12],
-      [0.35, 0.16], [0.50, 0.15], [0.65, 0.16],
-    ],
-  },
-  glabella: {
-    label: "Glabella",
-    color: "#FF8C42",
-    positions: [
-      [0.43, 0.22], [0.50, 0.20], [0.57, 0.22],
-      [0.46, 0.25], [0.54, 0.25],
-    ],
-  },
-  crowsFeetLeft: {
-    label: "Crow's Feet L",
-    color: "#FFD93D",
-    positions: [
-      [0.18, 0.30], [0.16, 0.34], [0.15, 0.38], [0.17, 0.42],
-    ],
-  },
-  crowsFeetRight: {
-    label: "Crow's Feet R",
-    color: "#FFD93D",
-    positions: [
-      [0.82, 0.30], [0.84, 0.34], [0.85, 0.38], [0.83, 0.42],
-    ],
-  },
-  bunnyLines: {
-    label: "Bunny Lines",
-    color: "#C77DFF",
-    positions: [
-      [0.44, 0.40], [0.56, 0.40],
-    ],
-  },
-  cheeks: {
-    label: "Cheeks",
-    color: "#6C63FF",
-    positions: [
-      [0.22, 0.48], [0.20, 0.54], [0.24, 0.58], [0.27, 0.52],
-      [0.78, 0.48], [0.80, 0.54], [0.76, 0.58], [0.73, 0.52],
-    ],
-  },
-  nasolabialFolds: {
-    label: "Nasolabial",
-    color: "#00B4D8",
-    positions: [
-      [0.36, 0.58], [0.34, 0.64], [0.33, 0.70],
-      [0.64, 0.58], [0.66, 0.64], [0.67, 0.70],
-    ],
-  },
-  lips: {
-    label: "Lips",
-    color: "#FF006E",
-    positions: [
-      [0.40, 0.74], [0.45, 0.73], [0.50, 0.72], [0.55, 0.73], [0.60, 0.74],
-      [0.43, 0.78], [0.50, 0.79], [0.57, 0.78],
-    ],
-  },
-  jawline: {
-    label: "Jawline",
-    color: "#06D6A0",
-    positions: [
-      [0.20, 0.70], [0.18, 0.76], [0.20, 0.82], [0.25, 0.86],
-      [0.80, 0.70], [0.82, 0.76], [0.80, 0.82], [0.75, 0.86],
-    ],
-  },
-  temples: {
-    label: "Temples",
-    color: "#E0AAFF",
-    positions: [
-      [0.14, 0.22], [0.15, 0.26],
-      [0.86, 0.22], [0.85, 0.26],
-    ],
-  },
-  tearTroughs: {
-    label: "Tear Troughs",
-    color: "#48BFE3",
-    positions: [
-      [0.34, 0.38], [0.38, 0.40],
-      [0.66, 0.38], [0.62, 0.40],
-    ],
-  },
+// ── MediaPipe Landmark Contours ──
+const LEFT_EYE_CONTOUR = [33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7, 33];
+const RIGHT_EYE_CONTOUR = [263, 466, 388, 387, 386, 385, 384, 398, 362, 382, 381, 380, 374, 373, 390, 249, 263];
+const LEFT_EYEBROW = [70, 63, 105, 66, 107];
+const RIGHT_EYEBROW = [300, 293, 334, 296, 336];
+const OUTER_LIP_CONTOUR = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409, 270, 269, 267, 0, 37, 39, 40, 185, 61];
+const INNER_LIP_CONTOUR = [78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
+const NOSE_BRIDGE = [6, 197, 195, 5, 4];
+
+// ── Zone config for labels/colors ──
+const ZONE_CONFIG: Record<string, { label: string; color: string }> = {
+  forehead: { label: "Forehead", color: "#FF6B6B" },
+  glabella: { label: "Glabella", color: "#FF8C42" },
+  crowsFeetLeft: { label: "Crow's Feet L", color: "#FFD93D" },
+  crowsFeetRight: { label: "Crow's Feet R", color: "#FFD93D" },
+  bunnyLines: { label: "Bunny Lines", color: "#C77DFF" },
+  cheeks: { label: "Cheeks", color: "#6C63FF" },
+  nasolabialFolds: { label: "Nasolabial", color: "#00B4D8" },
+  lips: { label: "Lips", color: "#FF006E" },
+  jawline: { label: "Jawline", color: "#06D6A0" },
+  temples: { label: "Temples", color: "#E0AAFF" },
+  tearTroughs: { label: "Tear Troughs", color: "#48BFE3" },
 };
+
+type LM = { x: number; y: number; z: number };
+
+// Compute injection point positions from face landmarks
+function computeZonePoints(lms: LM[], zone: string): [number, number][] {
+  const p = (i: number): [number, number] => [lms[i].x, lms[i].y];
+  const mid = (a: [number, number], b: [number, number], t = 0.5): [number, number] =>
+    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const offset = (pt: [number, number], dx: number, dy: number): [number, number] =>
+    [pt[0] + dx, pt[1] + dy];
+
+  // Face scale reference (inter-eye distance for proportional offsets)
+  const leftEye = p(33);
+  const rightEye = p(263);
+  const eyeDist = Math.abs(rightEye[0] - leftEye[0]);
+  const s = eyeDist * 0.12; // small offset unit
+
+  switch (zone) {
+    case "forehead": {
+      const top = p(10);     // forehead top center
+      const brow = p(9);     // glabella
+      // Two rows across forehead
+      const leftT = p(54);   // left temple
+      const rightT = p(284); // right temple
+      const row1y = top[1] + (brow[1] - top[1]) * 0.25;
+      const row2y = top[1] + (brow[1] - top[1]) * 0.55;
+      const pts: [number, number][] = [];
+      // Upper row: 5 points
+      for (let i = 0; i < 5; i++) {
+        const t = (i + 0.5) / 5;
+        pts.push([leftT[0] + (rightT[0] - leftT[0]) * t, row1y]);
+      }
+      // Lower row: 4 points
+      for (let i = 0; i < 4; i++) {
+        const t = (i + 0.75) / 4;
+        pts.push([leftT[0] + (rightT[0] - leftT[0]) * t, row2y]);
+      }
+      return pts;
+    }
+    case "glabella": {
+      const center = p(9);
+      return [
+        center,
+        offset(center, -s * 1.2, -s * 0.5),
+        offset(center, s * 1.2, -s * 0.5),
+        offset(center, -s * 0.8, s * 0.8),
+        offset(center, s * 0.8, s * 0.8),
+      ];
+    }
+    case "crowsFeetLeft": {
+      const outer = p(33);
+      return [
+        offset(outer, -s * 1.5, -s * 0.8),
+        offset(outer, -s * 1.8, s * 0.2),
+        offset(outer, -s * 1.6, s * 1.2),
+        offset(outer, -s * 1.2, s * 2.0),
+      ];
+    }
+    case "crowsFeetRight": {
+      const outer = p(263);
+      return [
+        offset(outer, s * 1.5, -s * 0.8),
+        offset(outer, s * 1.8, s * 0.2),
+        offset(outer, s * 1.6, s * 1.2),
+        offset(outer, s * 1.2, s * 2.0),
+      ];
+    }
+    case "bunnyLines": {
+      const noseB = p(6);
+      return [
+        offset(noseB, -s * 1.5, s * 0.5),
+        offset(noseB, s * 1.5, s * 0.5),
+      ];
+    }
+    case "cheeks": {
+      // Malar/zygomatic area — between outer eye and ear, below eye level
+      const lEye = p(33);
+      const rEye = p(263);
+      const lEar = p(234);
+      const rEar = p(454);
+      const noseTip = p(4);
+      const cheekY = lEye[1] + (noseTip[1] - lEye[1]) * 0.5;
+      const pts: [number, number][] = [];
+      // Left cheek
+      const lCheekX = lEye[0] - (lEye[0] - lEar[0]) * 0.4;
+      pts.push([lCheekX, cheekY - s], [lCheekX - s, cheekY + s], [lCheekX + s * 0.5, cheekY + s * 2]);
+      // Right cheek
+      const rCheekX = rEye[0] + (rEar[0] - rEye[0]) * 0.4;
+      pts.push([rCheekX, cheekY - s], [rCheekX + s, cheekY + s], [rCheekX - s * 0.5, cheekY + s * 2]);
+      return pts;
+    }
+    case "nasolabialFolds": {
+      const noseTip = p(4);
+      const lMouth = p(61);
+      const rMouth = p(291);
+      return [
+        mid(noseTip, lMouth, 0.3),
+        mid(noseTip, lMouth, 0.55),
+        mid(noseTip, lMouth, 0.8),
+        mid(noseTip, rMouth, 0.3),
+        mid(noseTip, rMouth, 0.55),
+        mid(noseTip, rMouth, 0.8),
+      ];
+    }
+    case "lips": {
+      // Injection points around the lip border
+      return [
+        p(0),    // upper lip center
+        p(17),   // lower lip center
+        p(61),   // left corner
+        p(291),  // right corner
+        mid(p(0), p(61), 0.5),   // upper left
+        mid(p(0), p(291), 0.5),  // upper right
+        mid(p(17), p(61), 0.5),  // lower left
+        mid(p(17), p(291), 0.5), // lower right
+      ];
+    }
+    case "jawline": {
+      const chin = p(152);
+      const lEar = p(234);
+      const rEar = p(454);
+      const pts: [number, number][] = [];
+      // Left jaw
+      for (let i = 1; i <= 4; i++) pts.push(mid(chin, lEar, i / 5));
+      // Right jaw
+      for (let i = 1; i <= 4; i++) pts.push(mid(chin, rEar, i / 5));
+      return pts;
+    }
+    case "temples": {
+      const lEyeOuter = p(33);
+      const rEyeOuter = p(263);
+      const lEar = p(234);
+      const rEar = p(454);
+      const foreheadTop = p(10);
+      return [
+        mid(lEyeOuter, lEar, 0.5).map((v, i) => i === 1 ? foreheadTop[1] + (lEyeOuter[1] - foreheadTop[1]) * 0.3 : v) as [number, number],
+        mid(lEyeOuter, lEar, 0.5).map((v, i) => i === 1 ? foreheadTop[1] + (lEyeOuter[1] - foreheadTop[1]) * 0.5 : v) as [number, number],
+        mid(rEyeOuter, rEar, 0.5).map((v, i) => i === 1 ? foreheadTop[1] + (rEyeOuter[1] - foreheadTop[1]) * 0.3 : v) as [number, number],
+        mid(rEyeOuter, rEar, 0.5).map((v, i) => i === 1 ? foreheadTop[1] + (rEyeOuter[1] - foreheadTop[1]) * 0.5 : v) as [number, number],
+      ];
+    }
+    case "tearTroughs": {
+      const lInner = p(133);
+      const rInner = p(362);
+      return [
+        offset(lInner, -s * 0.5, s * 1.2),
+        offset(lInner, s * 0.5, s * 1.5),
+        offset(rInner, s * 0.5, s * 1.2),
+        offset(rInner, -s * 0.5, s * 1.5),
+      ];
+    }
+    default:
+      return [];
+  }
+}
 
 export default function FaceAnalysis() {
   const [photo, setPhoto] = useState<string | null>(null);
@@ -153,11 +242,76 @@ export default function FaceAnalysis() {
   const [showCamera, setShowCamera] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [activeOverlays, setActiveOverlays] = useState<Set<string>>(new Set());
+  const [landmarks, setLandmarks] = useState<LM[] | null>(null);
+  const [detectingFace, setDetectingFace] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  // Run MediaPipe FaceMesh on a static image
+  const detectFace = useCallback(async (photoSrc: string) => {
+    setDetectingFace(true);
+    try {
+      // @ts-ignore
+      const { FaceMesh } = await import("@mediapipe/face_mesh");
+
+      const mesh = new FaceMesh({
+        locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`,
+      });
+
+      mesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+
+      return new Promise<LM[]>((resolve, reject) => {
+        mesh.onResults((results: any) => {
+          if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+            resolve(results.multiFaceLandmarks[0] as LM[]);
+          } else {
+            reject(new Error("No face detected in the photo"));
+          }
+          mesh.close();
+        });
+
+        // Create image element and send to FaceMesh
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          const c = document.createElement("canvas");
+          c.width = img.naturalWidth;
+          c.height = img.naturalHeight;
+          const ctx = c.getContext("2d")!;
+          ctx.drawImage(img, 0, 0);
+          mesh.send({ image: c });
+        };
+        img.onerror = () => reject(new Error("Failed to load image for face detection"));
+        img.src = photoSrc;
+      });
+    } catch (err: any) {
+      console.error("Face detection error:", err);
+      return null;
+    } finally {
+      setDetectingFace(false);
+    }
+  }, []);
+
+  // Run face detection when photo changes
+  useEffect(() => {
+    if (photo) {
+      setLandmarks(null);
+      detectFace(photo).then((lms) => {
+        if (lms) setLandmarks(lms as LM[]);
+      }).catch(() => {});
+    } else {
+      setLandmarks(null);
+    }
+  }, [photo, detectFace]);
 
   // Start camera
   const startCamera = async () => {
@@ -178,7 +332,6 @@ export default function FaceAnalysis() {
     }
   };
 
-  // Stop camera
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
@@ -186,7 +339,6 @@ export default function FaceAnalysis() {
     setShowCamera(false);
   };
 
-  // Capture photo from camera
   const capturePhoto = () => {
     if (!videoRef.current) return;
     const v = videoRef.current;
@@ -194,7 +346,6 @@ export default function FaceAnalysis() {
     c.width = v.videoWidth;
     c.height = v.videoHeight;
     const ctx = c.getContext("2d")!;
-    // Mirror for selfie
     ctx.translate(c.width, 0);
     ctx.scale(-1, 1);
     ctx.drawImage(v, 0, 0);
@@ -203,7 +354,6 @@ export default function FaceAnalysis() {
     stopCamera();
   };
 
-  // Handle file upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -217,7 +367,6 @@ export default function FaceAnalysis() {
     reader.readAsDataURL(file);
   };
 
-  // Run analysis
   const runAnalysis = async () => {
     if (!photo) return;
     setLoading(true);
@@ -234,7 +383,6 @@ export default function FaceAnalysis() {
       }
       const data = await res.json();
       setAnalysis(data.analysis);
-      // Enable all suggested overlays by default
       const suggested = new Set<string>();
       if (data.analysis.botox) {
         Object.entries(data.analysis.botox).forEach(([key, val]: [string, any]) => {
@@ -254,7 +402,6 @@ export default function FaceAnalysis() {
     }
   };
 
-  // Toggle overlay zone
   const toggleOverlay = (zone: string) => {
     setActiveOverlays((prev) => {
       const next = new Set(prev);
@@ -264,60 +411,128 @@ export default function FaceAnalysis() {
     });
   };
 
-  // Draw injection points on canvas
+  // ── Draw all overlays ──
   const drawOverlay = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !photo || !analysis) return;
+    if (!canvas || !photo || !landmarks) return;
     const ctx = canvas.getContext("2d")!;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
 
-    activeOverlays.forEach((zone) => {
-      const config = INJECTION_ZONES[zone];
-      if (!config) return;
-      const pts = config.positions;
-      // Determine how many points to show based on analysis data
-      let numPoints = pts.length;
-      const botoxData = (analysis.botox as any)?.[zone];
-      const fillerData = (analysis.filler as any)?.[zone];
-      if (botoxData?.suggest) {
-        numPoints = Math.min(botoxData.points || pts.length, pts.length);
-      } else if (fillerData?.suggest) {
-        const perSide = fillerData.pointsPerSide || fillerData.points || 0;
-        numPoints = Math.min(perSide * 2, pts.length);
-        if (fillerData.points) numPoints = Math.min(fillerData.points, pts.length);
+    const lx = (i: number) => landmarks[i].x * w;
+    const ly = (i: number) => landmarks[i].y * h;
+
+    // ── Always draw facial feature outlines ──
+    // Eye contours
+    const drawContour = (indices: number[], color: string, lineWidth: number, fill = false) => {
+      ctx.beginPath();
+      ctx.moveTo(lx(indices[0]), ly(indices[0]));
+      for (let i = 1; i < indices.length; i++) {
+        ctx.lineTo(lx(indices[i]), ly(indices[i]));
       }
-
-      for (let i = 0; i < numPoints; i++) {
-        const [px, py] = pts[i];
-        const x = px * canvas.width;
-        const y = py * canvas.height;
-
-        // Outer glow
-        ctx.beginPath();
-        ctx.arc(x, y, 10, 0, Math.PI * 2);
-        ctx.fillStyle = config.color + "40";
+      if (fill) {
+        ctx.fillStyle = color;
         ctx.fill();
-
-        // Inner dot
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
-        ctx.fillStyle = config.color;
-        ctx.fill();
-
-        // White center
-        ctx.beginPath();
-        ctx.arc(x, y, 2, 0, Math.PI * 2);
-        ctx.fillStyle = "white";
-        ctx.fill();
+      } else {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+        ctx.stroke();
       }
-    });
-  }, [photo, analysis, activeOverlays]);
+    };
+
+    // Left eye outline
+    drawContour(LEFT_EYE_CONTOUR, "rgba(255, 255, 255, 0.5)", 1.5);
+    // Right eye outline
+    drawContour(RIGHT_EYE_CONTOUR, "rgba(255, 255, 255, 0.5)", 1.5);
+
+    // Eyebrows
+    drawContour(LEFT_EYEBROW, "rgba(255, 255, 255, 0.35)", 1.5);
+    drawContour(RIGHT_EYEBROW, "rgba(255, 255, 255, 0.35)", 1.5);
+
+    // Nose bridge
+    drawContour(NOSE_BRIDGE, "rgba(255, 255, 255, 0.4)", 1.5);
+    // Nose tip dot
+    ctx.beginPath();
+    ctx.arc(lx(4), ly(4), 3, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.fill();
+    // Nose wings (nostrils outline)
+    const noseWings = [219, 218, 237, 44, 1, 274, 457, 438, 439];
+    drawContour(noseWings, "rgba(255, 255, 255, 0.3)", 1);
+
+    // Lip outlines
+    drawContour(OUTER_LIP_CONTOUR, "rgba(255, 100, 150, 0.6)", 2);
+    drawContour(INNER_LIP_CONTOUR, "rgba(255, 100, 150, 0.4)", 1);
+
+    // Iris dots
+    ctx.beginPath();
+    ctx.arc(lx(468), ly(468), 3, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(108, 99, 255, 0.6)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(lx(473), ly(473), 3, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(108, 99, 255, 0.6)";
+    ctx.fill();
+
+    // ── Draw injection zone dots ──
+    if (analysis) {
+      activeOverlays.forEach((zone) => {
+        const config = ZONE_CONFIG[zone];
+        if (!config) return;
+
+        const pts = computeZonePoints(landmarks, zone);
+
+        // Determine how many points to show
+        let numPoints = pts.length;
+        const botoxData = (analysis.botox as any)?.[zone];
+        const fillerData = (analysis.filler as any)?.[zone];
+        if (botoxData?.suggest) {
+          numPoints = Math.min(botoxData.points || pts.length, pts.length);
+        } else if (fillerData?.suggest) {
+          const perSide = fillerData.pointsPerSide || fillerData.points || 0;
+          numPoints = Math.min(zone === "lips" ? (fillerData.points || pts.length) : perSide * 2, pts.length);
+        }
+
+        for (let i = 0; i < numPoints; i++) {
+          const [px, py] = pts[i];
+          const x = px * w;
+          const y = py * h;
+
+          // Outer glow
+          ctx.beginPath();
+          ctx.arc(x, y, 10, 0, Math.PI * 2);
+          ctx.fillStyle = config.color + "40";
+          ctx.fill();
+
+          // Inner dot
+          ctx.beginPath();
+          ctx.arc(x, y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = config.color;
+          ctx.fill();
+
+          // White center
+          ctx.beginPath();
+          ctx.arc(x, y, 2, 0, Math.PI * 2);
+          ctx.fillStyle = "white";
+          ctx.fill();
+        }
+
+        // Draw zone label near first point
+        if (pts.length > 0) {
+          const [lbx, lby] = pts[0];
+          ctx.font = "bold 10px monospace";
+          ctx.fillStyle = config.color;
+          ctx.fillText(config.label, lbx * w - 15, lby * h - 14);
+        }
+      });
+    }
+  }, [photo, landmarks, analysis, activeOverlays]);
 
   useEffect(() => {
     drawOverlay();
   }, [drawOverlay]);
 
-  // When photo loads, size canvas to match
   const onPhotoLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
     if (canvasRef.current) {
@@ -332,6 +547,7 @@ export default function FaceAnalysis() {
     setAnalysis(null);
     setError(null);
     setActiveOverlays(new Set());
+    setLandmarks(null);
     stopCamera();
   };
 
@@ -453,12 +669,21 @@ export default function FaceAnalysis() {
                 <span style={{ fontSize: "18px" }}>&#x1F4F7;</span>
                 <span>Your Photo</span>
               </div>
-              {analysis && (
-                <span className="app-badge app-badge-green">Analyzed</span>
-              )}
+              <div style={{ display: "flex", gap: "8px" }}>
+                {detectingFace && (
+                  <span className="app-badge app-badge-yellow">Detecting face...</span>
+                )}
+                {landmarks && !detectingFace && (
+                  <span className="app-badge app-badge-green">Face detected</span>
+                )}
+                {analysis && (
+                  <span className="app-badge app-badge-purple">Analyzed</span>
+                )}
+              </div>
             </div>
             <div style={{ position: "relative", background: "#1a1a2e" }}>
               <img
+                ref={imgRef}
                 src={photo}
                 alt="Face photo"
                 onLoad={onPhotoLoad}
@@ -604,8 +829,8 @@ export default function FaceAnalysis() {
                     <ZoneCard
                       key={key}
                       zoneKey={key}
-                      label={INJECTION_ZONES[key]?.label || key}
-                      color={INJECTION_ZONES[key]?.color || "#999"}
+                      label={ZONE_CONFIG[key]?.label || key}
+                      color={ZONE_CONFIG[key]?.color || "#999"}
                       type="botox"
                       severity={area.severity}
                       suggest={area.suggest}
@@ -638,8 +863,8 @@ export default function FaceAnalysis() {
                     <ZoneCard
                       key={key}
                       zoneKey={key}
-                      label={INJECTION_ZONES[key]?.label || key}
-                      color={INJECTION_ZONES[key]?.color || "#999"}
+                      label={ZONE_CONFIG[key]?.label || key}
+                      color={ZONE_CONFIG[key]?.color || "#999"}
                       type="filler"
                       severity={area.assessment}
                       suggest={area.suggest}
@@ -710,14 +935,12 @@ export default function FaceAnalysis() {
   );
 }
 
-// Helper
 function skinScoreColor(score: number): string {
   if (score >= 8) return "var(--green)";
   if (score >= 5) return "var(--yellow-check)";
   return "var(--coral)";
 }
 
-// Zone Card sub-component
 function ZoneCard({
   zoneKey, label, color, type, severity, suggest, confidence, amount, points, notes, active, onToggle,
   severityColor, confidenceBadge,

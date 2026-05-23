@@ -2,5 +2,5 @@
 cd "$(dirname "$0")"
 rm -f .git/index.lock
 git add -A
-git commit -m "Add AI Face Analysis with botox/filler mapping"
+git commit -m "Fix injection points with MediaPipe face detection, add eye/nose/lip outlines"
 git push origin main
