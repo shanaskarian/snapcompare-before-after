@@ -77,7 +77,7 @@ async function analyzeWithGemini(
   beforeBase64: string,
   afterBase64: string
 ): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const response = await fetch(url, {
     method: "POST",
