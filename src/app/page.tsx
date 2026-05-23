@@ -48,12 +48,12 @@ function Header() {
 function Hero() {
   return (
     <section className="hero-section">
-      <h1 className="hero-title">PERFECT BEFORE &amp; AFTERS</h1>
+      <h1 className="hero-title">PERFECT BEFORE &amp; AFTERS + AI FACE ANALYSIS</h1>
       <p className="hero-subtitle">
         Turn your <span className="hero-highlight">phone camera</span> into a{" "}
         <span className="hero-bracket">clinical photo studio</span>
         <br />
-        that makes every patient comparison look professional.
+        with AI-powered aesthetic analysis, botox &amp; filler mapping, and professional comparisons.
       </p>
       <a href="/app" className="hero-cta">
         Try SnapCompare Free
@@ -158,13 +158,26 @@ function FeaturesSection() {
       tag: "AI Analysis",
       title: "AI-POWERED INSIGHTS",
       description:
-        "Connect Gemini or OpenAI to get professional analysis — photo quality scores, positioning consistency checks, and visible change detection.",
+        "Get professional analysis powered by Gemini — photo quality scores, positioning consistency checks, and visible change detection.",
       bullets: [
         "Photo quality scoring (1-10)",
         "Lighting & angle consistency check",
         "Objective change detection report",
       ],
       mockup: "ai",
+    },
+    {
+      tag: "NEW — Face Analysis",
+      title: "AI BOTOX & FILLER MAP",
+      description:
+        "Upload a face photo and get AI-powered educational suggestions for aesthetic treatments — with injection points visualized directly on the face.",
+      bullets: [
+        "Age & skin quality estimation",
+        "Botox zone mapping with unit ranges",
+        "Filler area suggestions with injection points",
+        "Interactive overlay to toggle treatment areas",
+      ],
+      mockup: "face-analysis",
     },
   ];
 
@@ -318,7 +331,7 @@ function FeatureMockup({ type }: { type: string }) {
     ai: (
       <div className="mockup-app-screen mockup-ai-screen">
         <div className="ai-header-mock">
-          <span className="ai-icon">⚡</span>
+          <span className="ai-icon">&#x26A1;</span>
           <span className="ai-title-text">AI Analysis</span>
           <span className="ai-badge">Gemini</span>
         </div>
@@ -344,6 +357,62 @@ function FeatureMockup({ type }: { type: string }) {
             <span className="ai-change-title">Visible Changes</span>
             <p className="ai-change-text">Improved skin texture uniformity in the forehead and cheek area. Reduced redness around the nose...</p>
           </div>
+        </div>
+      </div>
+    ),
+    "face-analysis": (
+      <div className="mockup-app-screen mockup-ai-screen">
+        <div className="ai-header-mock">
+          <span className="ai-icon">&#x1F9D1;&#x200D;&#x2695;&#xFE0F;</span>
+          <span className="ai-title-text">Face Analysis</span>
+          <span className="ai-badge" style={{ background: "rgba(255,107,107,0.2)", color: "#FF6B6B" }}>NEW</span>
+        </div>
+        <div style={{ padding: "8px", position: "relative" }}>
+          <svg viewBox="0 0 260 280" style={{ width: "100%", display: "block" }}>
+            <defs>
+              <linearGradient id="skinGrad2" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#E8C4A0" />
+                <stop offset="100%" stopColor="#D4A574" />
+              </linearGradient>
+            </defs>
+            <rect width="260" height="280" rx="10" fill="#1e1e2e" />
+            <ellipse cx="130" cy="130" rx="55" ry="70" fill="url(#skinGrad2)" />
+            <ellipse cx="108" cy="115" rx="7" ry="4.5" fill="#5D4037" />
+            <ellipse cx="152" cy="115" rx="7" ry="4.5" fill="#5D4037" />
+            <path d="M118 140 Q130 150 142 140" stroke="#8D6E63" strokeWidth="2" fill="none" />
+            {/* Botox points - forehead */}
+            <circle cx="105" cy="70" r="4" fill="#FF6B6B" opacity="0.8" />
+            <circle cx="130" cy="67" r="4" fill="#FF6B6B" opacity="0.8" />
+            <circle cx="155" cy="70" r="4" fill="#FF6B6B" opacity="0.8" />
+            {/* Botox points - crow's feet */}
+            <circle cx="72" cy="110" r="3.5" fill="#FFD93D" opacity="0.8" />
+            <circle cx="70" cy="120" r="3.5" fill="#FFD93D" opacity="0.8" />
+            <circle cx="188" cy="110" r="3.5" fill="#FFD93D" opacity="0.8" />
+            <circle cx="190" cy="120" r="3.5" fill="#FFD93D" opacity="0.8" />
+            {/* Filler points - cheeks */}
+            <circle cx="88" cy="140" r="4" fill="#6C63FF" opacity="0.7" />
+            <circle cx="85" cy="150" r="4" fill="#6C63FF" opacity="0.7" />
+            <circle cx="172" cy="140" r="4" fill="#6C63FF" opacity="0.7" />
+            <circle cx="175" cy="150" r="4" fill="#6C63FF" opacity="0.7" />
+            {/* Filler - nasolabial */}
+            <circle cx="112" cy="158" r="3" fill="#00B4D8" opacity="0.7" />
+            <circle cx="148" cy="158" r="3" fill="#00B4D8" opacity="0.7" />
+            {/* Filler - lips */}
+            <circle cx="122" cy="172" r="3" fill="#FF006E" opacity="0.7" />
+            <circle cx="138" cy="172" r="3" fill="#FF006E" opacity="0.7" />
+            {/* Legend */}
+            <circle cx="20" cy="240" r="4" fill="#FF6B6B" />
+            <text x="30" y="243" fill="rgba(255,255,255,0.6)" fontSize="9" fontFamily="monospace">Botox</text>
+            <circle cx="80" cy="240" r="4" fill="#6C63FF" />
+            <text x="90" y="243" fill="rgba(255,255,255,0.6)" fontSize="9" fontFamily="monospace">Filler</text>
+            <circle cx="140" cy="240" r="4" fill="#FFD93D" />
+            <text x="150" y="243" fill="rgba(255,255,255,0.6)" fontSize="9" fontFamily="monospace">Crow&apos;s Feet</text>
+            {/* Age badge */}
+            <rect x="15" y="255" width="70" height="18" rx="4" fill="rgba(255,255,255,0.1)" />
+            <text x="50" y="267" textAnchor="middle" fill="white" fontSize="9" fontFamily="monospace">Age: 35-40</text>
+            <rect x="95" y="255" width="70" height="18" rx="4" fill="rgba(255,255,255,0.1)" />
+            <text x="130" y="267" textAnchor="middle" fill="white" fontSize="9" fontFamily="monospace">Skin: 7/10</text>
+          </svg>
         </div>
       </div>
     ),
@@ -442,6 +511,7 @@ function PricingSection() {
             <ul className="pricing-features">
               <li className="pricing-feature"><span className="pf-check">✓</span> Everything in Free</li>
               <li className="pricing-feature"><span className="pf-check pro-check">✓</span> AI photo analysis (Gemini)</li>
+              <li className="pricing-feature"><span className="pf-check pro-check">✓</span> AI Face Analysis &amp; Botox/Filler Map</li>
               <li className="pricing-feature"><span className="pf-check pro-check">✓</span> Change detection reports</li>
               <li className="pricing-feature"><span className="pf-check pro-check">✓</span> Export comparison images</li>
               <li className="pricing-feature"><span className="pf-check pro-check">✓</span> Priority support</li>

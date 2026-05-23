@@ -2,5 +2,5 @@
 cd "$(dirname "$0")"
 rm -f .git/index.lock
 git add -A
-git commit -m "Fix Gemini model to gemini-2.5-flash"
+git commit -m "Add AI Face Analysis with botox/filler mapping"
 git push origin main

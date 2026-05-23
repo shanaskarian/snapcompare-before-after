@@ -5,8 +5,9 @@ import CameraCapture, { type FaceNodes } from "@/components/CameraCapture";
 import ComparisonSlider from "@/components/ComparisonSlider";
 import SessionManager, { type PhotoSession } from "@/components/SessionManager";
 import AIAnalysis from "@/components/AIAnalysis";
+import FaceAnalysis from "@/components/FaceAnalysis";
 
-type AppView = "capture" | "compare" | "sessions";
+type AppView = "capture" | "compare" | "sessions" | "analyze";
 
 export default function AppPage() {
   const [view, setView] = useState<AppView>("sessions");
@@ -127,6 +128,12 @@ export default function AppPage() {
           >
             Compare
           </button>
+          <button
+            onClick={() => setView("analyze")}
+            className={`app-nav-btn ${view === "analyze" ? "active" : ""}`}
+          >
+            Face Analysis
+          </button>
         </nav>
       </div>
 
@@ -150,6 +157,7 @@ export default function AppPage() {
             </div>
           </div>
         )}
+        {view === "analyze" && <FaceAnalysis />}
         {view === "capture" && !currentSession && (
           <div className="empty-state">
             <svg className="empty-state-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
