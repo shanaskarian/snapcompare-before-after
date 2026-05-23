@@ -331,7 +331,14 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
     ctx.setLineDash([]);
 
     // Status text at bottom of guide
+    // Pre-mirror text when in selfie mode so it reads correctly after CSS scaleX(-1)
+    const isSelfie = facingMode === "user";
     const fontSize = Math.max(14, Math.round(w * 0.028));
+    ctx.save();
+    if (isSelfie) {
+      ctx.translate(w, 0);
+      ctx.scale(-1, 1);
+    }
     ctx.font = `600 ${fontSize}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
@@ -349,6 +356,7 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
 
     ctx.fillStyle = guideColor;
     ctx.fillText(statusText, cx, textY + 4);
+    ctx.restore();
 
     // Shoulder guide line at bottom
     const shoulderY = cy + ry + pillH + 30;
