@@ -248,8 +248,12 @@ export default function FaceAnalysis() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const liveCanvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const meshRef = useRef<any>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const liveLandmarksRef = useRef<LM[] | null>(null);
 
   // Run MediaPipe FaceMesh on a static image
   const detectFace = useCallback(async (photoSrc: string) => {
@@ -313,6 +317,139 @@ export default function FaceAnalysis() {
     }
   }, [photo, detectFace]);
 
+  // ── Draw face contours on the live camera canvas ──
+  const drawLiveOverlay = useCallback(() => {
+    const canvas = liveCanvasRef.current;
+    const video = videoRef.current;
+    const lms = liveLandmarksRef.current;
+    if (!canvas || !video || !lms) return;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const ctx = canvas.getContext("2d")!;
+    ctx.clearRect(0, 0, w, h);
+
+    // Mirror: the video is displayed with scaleX(-1), so we mirror the landmark x
+    const lx = (i: number) => (1 - lms[i].x) * w;
+    const ly = (i: number) => lms[i].y * h;
+
+    const drawContour = (indices: number[], color: string, lineWidth: number) => {
+      ctx.beginPath();
+      ctx.moveTo(lx(indices[0]), ly(indices[0]));
+      for (let k = 1; k < indices.length; k++) {
+        ctx.lineTo(lx(indices[k]), ly(indices[k]));
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.stroke();
+    };
+
+    // Eye contours
+    drawContour(LEFT_EYE_CONTOUR, "rgba(255, 255, 255, 0.6)", 1.5);
+    drawContour(RIGHT_EYE_CONTOUR, "rgba(255, 255, 255, 0.6)", 1.5);
+
+    // Eyebrows
+    drawContour(LEFT_EYEBROW, "rgba(255, 255, 255, 0.4)", 1.5);
+    drawContour(RIGHT_EYEBROW, "rgba(255, 255, 255, 0.4)", 1.5);
+
+    // Nose bridge
+    drawContour(NOSE_BRIDGE, "rgba(255, 255, 255, 0.5)", 1.5);
+    // Nose tip dot
+    ctx.beginPath();
+    ctx.arc(lx(4), ly(4), 3, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+    ctx.fill();
+    // Nose wings
+    const noseWings = [219, 218, 237, 44, 1, 274, 457, 438, 439];
+    drawContour(noseWings, "rgba(255, 255, 255, 0.35)", 1);
+
+    // Lip outlines
+    drawContour(OUTER_LIP_CONTOUR, "rgba(255, 100, 150, 0.7)", 2);
+    drawContour(INNER_LIP_CONTOUR, "rgba(255, 100, 150, 0.45)", 1);
+
+    // Iris dots (refineLandmarks provides indices 468-477)
+    if (lms.length > 473) {
+      ctx.beginPath();
+      ctx.arc(lx(468), ly(468), 3, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(108, 99, 255, 0.7)";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(lx(473), ly(473), 3, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(108, 99, 255, 0.7)";
+      ctx.fill();
+    }
+  }, []);
+
+  // ── Live face detection loop ──
+  const startLiveDetection = useCallback(async () => {
+    try {
+      // @ts-ignore
+      const { FaceMesh } = await import("@mediapipe/face_mesh");
+
+      const mesh = new FaceMesh({
+        locateFile: (f: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`,
+      });
+      mesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+      mesh.onResults((results: any) => {
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+          liveLandmarksRef.current = results.multiFaceLandmarks[0] as LM[];
+        } else {
+          liveLandmarksRef.current = null;
+        }
+        drawLiveOverlay();
+      });
+      meshRef.current = mesh;
+
+      // Detection loop: send video frames to FaceMesh
+      let processing = false;
+      const loop = async () => {
+        if (!videoRef.current || !meshRef.current || videoRef.current.readyState < 2) {
+          animFrameRef.current = requestAnimationFrame(loop);
+          return;
+        }
+        // Size the live canvas to match video display size
+        const liveCanvas = liveCanvasRef.current;
+        if (liveCanvas && videoRef.current) {
+          const rect = videoRef.current.getBoundingClientRect();
+          if (liveCanvas.width !== rect.width || liveCanvas.height !== rect.height) {
+            liveCanvas.width = rect.width;
+            liveCanvas.height = rect.height;
+          }
+        }
+        if (!processing) {
+          processing = true;
+          try {
+            await meshRef.current.send({ image: videoRef.current });
+          } catch {
+            // ignore send errors if camera stopped
+          }
+          processing = false;
+        }
+        animFrameRef.current = requestAnimationFrame(loop);
+      };
+      animFrameRef.current = requestAnimationFrame(loop);
+    } catch (err) {
+      console.error("Live face detection init error:", err);
+    }
+  }, [drawLiveOverlay]);
+
+  const stopLiveDetection = useCallback(() => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (meshRef.current) {
+      try { meshRef.current.close(); } catch {}
+      meshRef.current = null;
+    }
+    liveLandmarksRef.current = null;
+  }, []);
+
   // Start camera
   const startCamera = async () => {
     setShowCamera(true);
@@ -325,6 +462,8 @@ export default function FaceAnalysis() {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
         setCameraReady(true);
+        // Start live face detection after camera is ready
+        startLiveDetection();
       }
     } catch {
       setError("Could not access camera. Please allow camera permissions.");
@@ -333,6 +472,7 @@ export default function FaceAnalysis() {
   };
 
   const stopCamera = () => {
+    stopLiveDetection();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     setCameraReady(false);
@@ -542,6 +682,14 @@ export default function FaceAnalysis() {
     }
   };
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopLiveDetection();
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, [stopLiveDetection]);
+
   const resetAll = () => {
     setPhoto(null);
     setAnalysis(null);
@@ -643,6 +791,17 @@ export default function FaceAnalysis() {
               playsInline
               muted
               style={{ width: "100%", display: "block", transform: "scaleX(-1)" }}
+            />
+            <canvas
+              ref={liveCanvasRef}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                pointerEvents: "none",
+              }}
             />
           </div>
           <div style={{ display: "flex", justifyContent: "center", gap: "16px" }}>

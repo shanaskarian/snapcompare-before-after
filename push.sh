@@ -2,5 +2,5 @@
 cd "$(dirname "$0")"
 rm -f .git/index.lock
 git add -A
-git commit -m "Fix injection points with MediaPipe face detection, add eye/nose/lip outlines"
+git commit -m "Add live face mesh overlay on camera + fix injection point positioning"
 git push origin main
