@@ -9,7 +9,7 @@ interface Props {
 
 export default function ComparisonSlider({ beforeSrc, afterSrc }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [sliderPos, setSliderPos] = useState(50); // percentage
+  const [sliderPos, setSliderPos] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
   const [viewMode, setViewMode] = useState<"slider" | "sideBySide" | "overlay">("slider");
   const [overlayOpacity, setOverlayOpacity] = useState(50);
@@ -58,18 +58,14 @@ export default function ComparisonSlider({ beforeSrc, afterSrc }: Props) {
   }, [isDragging, updatePosition]);
 
   return (
-    <div className="space-y-3">
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
       {/* View mode tabs */}
-      <div className="flex gap-1 bg-gray-800 p-1 rounded-lg w-fit">
+      <div className="compare-view-tabs">
         {(["slider", "sideBySide", "overlay"] as const).map((m) => (
           <button
             key={m}
             onClick={() => setViewMode(m)}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              viewMode === m
-                ? "bg-indigo-600 text-white"
-                : "text-gray-400 hover:text-white"
-            }`}
+            className={`compare-tab ${viewMode === m ? "active" : ""}`}
           >
             {m === "sideBySide" ? "Side by Side" : m.charAt(0).toUpperCase() + m.slice(1)}
           </button>
@@ -80,31 +76,31 @@ export default function ComparisonSlider({ beforeSrc, afterSrc }: Props) {
       {viewMode === "slider" && (
         <div
           ref={containerRef}
-          className="comparison-container relative rounded-xl overflow-hidden aspect-[3/4] max-h-[70vh] bg-gray-900"
+          className="comparison-container"
+          style={{
+            position: "relative", borderRadius: "var(--radius)",
+            overflow: "hidden", aspectRatio: "3/4", maxHeight: "70vh",
+            border: "3px solid var(--ink)",
+            boxShadow: "6px 6px 0 rgba(0,0,0,0.08)",
+            background: "var(--ink)", cursor: "ew-resize", userSelect: "none"
+          }}
           onMouseDown={handleMouseDown}
           onTouchStart={handleTouchStart}
         >
-          {/* After image (full width behind) */}
           <img
             src={afterSrc}
             alt="After"
-            className="absolute inset-0 w-full h-full object-cover select-none"
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
             draggable={false}
           />
-
-          {/* Before image (clipped by slider) */}
-          <div
-            className="absolute inset-0 overflow-hidden"
-            style={{ width: `${sliderPos}%` }}
-          >
+          <div style={{ position: "absolute", inset: 0, overflow: "hidden", width: `${sliderPos}%` }}>
             <img
               src={beforeSrc}
               alt="Before"
-              className="absolute inset-0 w-full h-full object-cover select-none"
               style={{
-                width: containerRef.current
-                  ? `${containerRef.current.offsetWidth}px`
-                  : "100vw",
+                position: "absolute", inset: 0,
+                width: containerRef.current ? `${containerRef.current.offsetWidth}px` : "100vw",
+                height: "100%", objectFit: "cover",
                 maxWidth: "none",
               }}
               draggable={false}
@@ -113,58 +109,66 @@ export default function ComparisonSlider({ beforeSrc, afterSrc }: Props) {
 
           {/* Slider line + handle */}
           <div
-            className="comparison-slider-line"
+            className="comparison-slider-line-app"
             style={{ left: `${sliderPos}%` }}
           />
           <div
-            className="comparison-slider-handle"
+            className="comparison-slider-handle-app"
             style={{ left: `${sliderPos}%` }}
           >
-            <svg className="w-4 h-4 text-indigo-600" viewBox="0 0 24 24" fill="currentColor">
+            <svg style={{ width: "16px", height: "16px", color: "var(--purple)" }} viewBox="0 0 24 24" fill="currentColor">
               <path d="M8 5l-5 7 5 7V5zm8 0v14l5-7-5-7z" />
             </svg>
           </div>
 
           {/* Labels */}
-          <div className="absolute top-3 left-3 bg-blue-600/80 px-2 py-1 rounded text-xs font-semibold z-20">
-            Before
-          </div>
-          <div className="absolute top-3 right-3 bg-emerald-600/80 px-2 py-1 rounded text-xs font-semibold z-20">
-            After
-          </div>
+          <span className="photo-label photo-label-before">Before</span>
+          <span className="photo-label photo-label-after">After</span>
         </div>
       )}
 
       {/* Side by side view */}
       {viewMode === "sideBySide" && (
-        <div className="grid grid-cols-2 gap-2 rounded-xl overflow-hidden">
-          <div className="relative aspect-[3/4] bg-gray-900">
-            <img src={beforeSrc} alt="Before" className="w-full h-full object-cover" />
-            <span className="absolute top-2 left-2 bg-blue-600/80 px-2 py-1 rounded text-xs font-semibold">
-              Before
-            </span>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <div style={{
+            position: "relative", aspectRatio: "3/4",
+            borderRadius: "var(--radius)", overflow: "hidden",
+            border: "3px solid var(--ink)", boxShadow: "4px 4px 0 rgba(0,0,0,0.06)"
+          }}>
+            <img src={beforeSrc} alt="Before" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <span className="photo-label photo-label-before">Before</span>
           </div>
-          <div className="relative aspect-[3/4] bg-gray-900">
-            <img src={afterSrc} alt="After" className="w-full h-full object-cover" />
-            <span className="absolute top-2 right-2 bg-emerald-600/80 px-2 py-1 rounded text-xs font-semibold">
-              After
-            </span>
+          <div style={{
+            position: "relative", aspectRatio: "3/4",
+            borderRadius: "var(--radius)", overflow: "hidden",
+            border: "3px solid var(--ink)", boxShadow: "4px 4px 0 rgba(0,0,0,0.06)"
+          }}>
+            <img src={afterSrc} alt="After" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <span className="photo-label photo-label-after">After</span>
           </div>
         </div>
       )}
 
       {/* Overlay view */}
       {viewMode === "overlay" && (
-        <div className="space-y-2">
-          <div className="relative rounded-xl overflow-hidden aspect-[3/4] max-h-[70vh] bg-gray-900">
-            <img src={beforeSrc} alt="Before" className="absolute inset-0 w-full h-full object-cover" />
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <div style={{
+            position: "relative", aspectRatio: "3/4", maxHeight: "70vh",
+            borderRadius: "var(--radius)", overflow: "hidden",
+            border: "3px solid var(--ink)", boxShadow: "6px 6px 0 rgba(0,0,0,0.08)"
+          }}>
+            <img src={beforeSrc} alt="Before" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
             <img
               src={afterSrc}
               alt="After"
-              className="absolute inset-0 w-full h-full object-cover"
-              style={{ opacity: overlayOpacity / 100 }}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity: overlayOpacity / 100 }}
             />
-            <div className="absolute top-3 left-3 bg-black/60 px-2 py-1 rounded text-xs font-semibold z-10">
+            <div style={{
+              position: "absolute", top: "12px", left: "12px",
+              fontFamily: "var(--font-mono)", fontSize: "11px", fontWeight: 600,
+              background: "rgba(0,0,0,0.6)", color: "white",
+              padding: "4px 10px", borderRadius: "6px", zIndex: 10
+            }}>
               Overlay: {overlayOpacity}%
             </div>
           </div>
@@ -174,9 +178,9 @@ export default function ComparisonSlider({ beforeSrc, afterSrc }: Props) {
             max={100}
             value={overlayOpacity}
             onChange={(e) => setOverlayOpacity(Number(e.target.value))}
-            className="w-full accent-indigo-500"
+            className="overlay-slider"
           />
-          <div className="flex justify-between text-xs text-gray-400">
+          <div className="overlay-labels">
             <span>Before</span>
             <span>After</span>
           </div>

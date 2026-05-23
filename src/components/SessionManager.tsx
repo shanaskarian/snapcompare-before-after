@@ -46,124 +46,149 @@ export default function SessionManager({ onNewSession, onLoadSession }: Props) {
     return "needs-before";
   };
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "complete":
+        return <span className="app-badge app-badge-green">Complete</span>;
+      case "needs-after":
+        return <span className="app-badge app-badge-yellow">Needs After</span>;
+      default:
+        return <span className="app-badge app-badge-coral">Needs Photos</span>;
+    }
+  };
+
   return (
-    <div className="p-4 max-w-2xl mx-auto space-y-4">
-      {/* New session button */}
-      {!showNewForm ? (
-        <button
-          onClick={() => setShowNewForm(true)}
-          className="w-full py-4 border-2 border-dashed border-gray-700 hover:border-indigo-500 rounded-xl text-gray-400 hover:text-white transition-colors flex items-center justify-center gap-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          New Patient Session
-        </button>
-      ) : (
-        <div className="bg-gray-800 rounded-xl p-4 space-y-3">
-          <input
-            type="text"
-            placeholder="Patient name or ID..."
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-            autoFocus
-            className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg focus:border-indigo-500 focus:outline-none text-white placeholder-gray-500"
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowNewForm(false)}
-              className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleCreate}
-              disabled={!newName.trim()}
-              className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition-colors disabled:opacity-40"
-            >
-              Start Session
-            </button>
-          </div>
+    <div style={{ padding: "24px", maxWidth: "700px", margin: "0 auto" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {/* Section title */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+          <h2 className="app-section-title">Patient Sessions</h2>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-light)" }}>
+            {sessions.length} session{sessions.length !== 1 ? "s" : ""}
+          </span>
         </div>
-      )}
 
-      {/* Session list */}
-      {sessions.length === 0 && (
-        <div className="text-center py-12 text-gray-500">
-          <svg className="w-16 h-16 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-          </svg>
-          <p>No sessions yet. Create one to get started.</p>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {sessions.map((session) => {
-          const status = getStatus(session);
-          return (
-            <div
-              key={session.id}
-              className="bg-gray-800/50 border border-gray-800 rounded-xl p-4 hover:border-gray-700 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {/* Thumbnail */}
-                  {session.beforePhoto ? (
-                    <img
-                      src={session.beforePhoto}
-                      alt=""
-                      className="w-12 h-12 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-lg bg-gray-700 flex items-center justify-center">
-                      <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                  )}
-
-                  <div>
-                    <h3 className="font-medium">{session.patientName}</h3>
-                    <p className="text-xs text-gray-400">
-                      {new Date(session.createdAt).toLocaleDateString()} &middot;{" "}
-                      <span
-                        className={
-                          status === "complete"
-                            ? "text-green-400"
-                            : "text-yellow-400"
-                        }
-                      >
-                        {status === "complete"
-                          ? "Complete"
-                          : status === "needs-after"
-                          ? "Needs after photo"
-                          : "Needs photos"}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => onLoadSession(session)}
-                    className="px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-lg text-sm font-medium transition-colors"
-                  >
-                    Open
-                  </button>
-                  <button
-                    onClick={() => handleDelete(session.id)}
-                    className="p-2 text-gray-500 hover:text-red-400 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
+        {/* New session button / form */}
+        {!showNewForm ? (
+          <button onClick={() => setShowNewForm(true)} className="new-session-btn">
+            <svg style={{ width: "20px", height: "20px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            New Patient Session
+          </button>
+        ) : (
+          <div className="app-card">
+            <div className="app-card-header">
+              <span>New Session</span>
+              <span style={{ fontSize: "12px", opacity: 0.6, fontFamily: "var(--font-mono)" }}>Enter patient info</span>
+            </div>
+            <div className="app-card-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <input
+                type="text"
+                placeholder="Patient name or ID..."
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                autoFocus
+                className="app-input"
+              />
+              <div style={{ display: "flex", gap: "12px" }}>
+                <button onClick={() => setShowNewForm(false)} className="app-btn-secondary" style={{ flex: 1 }}>
+                  Cancel
+                </button>
+                <button onClick={handleCreate} disabled={!newName.trim()} className="app-btn-primary" style={{ flex: 1 }}>
+                  Start Session
+                </button>
               </div>
             </div>
-          );
-        })}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {sessions.length === 0 && (
+          <div className="empty-state">
+            <svg className="empty-state-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            <h3 className="empty-state-title">No Sessions Yet</h3>
+            <p className="empty-state-desc">Create your first session to get started.</p>
+          </div>
+        )}
+
+        {/* Session list */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {sessions.map((session) => {
+            const status = getStatus(session);
+            return (
+              <div key={session.id} className="session-card">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                    {/* Thumbnail */}
+                    {session.beforePhoto ? (
+                      <img
+                        src={session.beforePhoto}
+                        alt=""
+                        style={{
+                          width: "52px", height: "52px",
+                          borderRadius: "12px", objectFit: "cover",
+                          border: "2px solid var(--ink)"
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: "52px", height: "52px",
+                        borderRadius: "12px",
+                        background: "var(--cream-dark)",
+                        border: "2px solid var(--ink)",
+                        display: "flex", alignItems: "center", justifyContent: "center"
+                      }}>
+                        <svg style={{ width: "24px", height: "24px", color: "var(--text-light)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                    )}
+
+                    <div>
+                      <h3 style={{ fontFamily: "var(--font-display)", fontSize: "18px", color: "var(--ink)", letterSpacing: "0.5px", marginBottom: "4px" }}>
+                        {session.patientName}
+                      </h3>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-light)" }}>
+                          {new Date(session.createdAt).toLocaleDateString()}
+                        </span>
+                        {getStatusBadge(status)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <button onClick={() => onLoadSession(session)} className="app-btn-secondary" style={{ padding: "8px 20px" }}>
+                      Open
+                    </button>
+                    <button
+                      onClick={() => handleDelete(session.id)}
+                      style={{
+                        padding: "8px",
+                        background: "transparent",
+                        border: "2px solid transparent",
+                        borderRadius: "8px",
+                        color: "var(--text-light)",
+                        cursor: "pointer",
+                        transition: "all 0.15s"
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = "var(--coral)"; e.currentTarget.style.borderColor = "var(--coral)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-light)"; e.currentTarget.style.borderColor = "transparent"; }}
+                    >
+                      <svg style={{ width: "16px", height: "16px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

@@ -49,12 +49,7 @@ export default function AIAnalysis({
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          beforePhoto,
-          afterPhoto,
-          apiKey,
-          provider,
-        }),
+        body: JSON.stringify({ beforePhoto, afterPhoto, apiKey, provider }),
       });
 
       if (!res.ok) {
@@ -73,178 +68,175 @@ export default function AIAnalysis({
   };
 
   return (
-    <div className="bg-gray-800/50 border border-gray-800 rounded-xl p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-          </svg>
-          <h3 className="font-semibold">AI Analysis</h3>
+    <div className="ai-panel">
+      {/* Header */}
+      <div className="ai-panel-header">
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "18px" }}>&#x2728;</span>
+          <span>AI Analysis</span>
         </div>
-        <span className="text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded">
-          Powered by {provider === "gemini" ? "Gemini" : "OpenAI"}
+        <span className="app-badge app-badge-purple">
+          {provider === "gemini" ? "Gemini" : "OpenAI"}
         </span>
       </div>
 
-      {/* API Key setup */}
-      {!apiKey && (
-        <div className="space-y-3">
-          <p className="text-sm text-gray-400">
-            Connect an AI API to get intelligent analysis of your before &amp;
-            after photos. The AI will analyze lighting consistency, facial
-            positioning, and visible changes.
-          </p>
+      <div className="ai-panel-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {/* API Key setup */}
+        {!apiKey && (
+          <>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text-light)", lineHeight: 1.7 }}>
+              Connect an AI API to get intelligent analysis of your before &amp;
+              after photos. The AI will analyze lighting consistency, facial
+              positioning, and visible changes.
+            </p>
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => setProvider("gemini")}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${
+            <div className="provider-toggle">
+              <button
+                onClick={() => setProvider("gemini")}
+                className={`provider-btn ${provider === "gemini" ? "active" : ""}`}
+              >
+                Gemini (Recommended)
+              </button>
+              <button
+                onClick={() => setProvider("openai")}
+                className={`provider-btn ${provider === "openai" ? "active" : ""}`}
+              >
+                OpenAI GPT-4o
+              </button>
+            </div>
+
+            <input
+              type="password"
+              placeholder={
                 provider === "gemini"
-                  ? "border-indigo-500 bg-indigo-600/20 text-indigo-300"
-                  : "border-gray-700 text-gray-400 hover:border-gray-600"
-              }`}
-            >
-              Gemini (Recommended)
-            </button>
-            <button
-              onClick={() => setProvider("openai")}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${
-                provider === "openai"
-                  ? "border-indigo-500 bg-indigo-600/20 text-indigo-300"
-                  : "border-gray-700 text-gray-400 hover:border-gray-600"
-              }`}
-            >
-              OpenAI GPT-4o
-            </button>
-          </div>
-
-          <input
-            type="password"
-            placeholder={
-              provider === "gemini"
-                ? "Paste your Gemini API key..."
-                : "Paste your OpenAI API key..."
-            }
-            value={apiKeyInput}
-            onChange={(e) => setApiKeyInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && saveApiKey()}
-            className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg focus:border-indigo-500 focus:outline-none text-white placeholder-gray-500 text-sm"
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={saveApiKey}
-              disabled={!apiKeyInput.trim()}
-              className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition-colors disabled:opacity-40"
-            >
+                  ? "Paste your Gemini API key..."
+                  : "Paste your OpenAI API key..."
+              }
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveApiKey()}
+              className="app-input"
+            />
+            <button onClick={saveApiKey} disabled={!apiKeyInput.trim()} className="app-btn-purple" style={{ width: "100%" }}>
               Save &amp; Analyze
             </button>
-          </div>
-          <p className="text-xs text-gray-500">
-            {provider === "gemini"
-              ? "Get a free API key at ai.google.dev — 15 requests/min free."
-              : "Get a key at platform.openai.com — pay-as-you-go pricing."}
-            {" "}Your key is stored locally on this device only.
-          </p>
-        </div>
-      )}
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-light)" }}>
+              {provider === "gemini"
+                ? "Get a free API key at ai.google.dev — 15 requests/min free."
+                : "Get a key at platform.openai.com — pay-as-you-go pricing."}
+              {" "}Your key is stored locally on this device only.
+            </p>
+          </>
+        )}
 
-      {/* Analysis button (when key is set) */}
-      {apiKey && !analysis && (
-        <div className="space-y-3">
-          <button
-            onClick={runAnalysis}
-            disabled={loading}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg font-medium transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Analyzing photos...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                Run AI Analysis
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={() => {
-              localStorage.removeItem("ba-gemini-key");
-              localStorage.removeItem("ba-ai-provider");
-              setApiKey(null);
-            }}
-            className="w-full py-2 text-gray-500 hover:text-gray-300 text-xs transition-colors"
-          >
-            Change API key
-          </button>
-        </div>
-      )}
-
-      {/* Error */}
-      {error && (
-        <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 text-sm text-red-300">
-          {error}
-          <button
-            onClick={runAnalysis}
-            className="ml-2 underline hover:text-red-200"
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* Analysis results */}
-      {analysis && (
-        <div className="space-y-3">
-          <div className="prose prose-sm prose-invert max-w-none">
-            <div
-              className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap"
-              dangerouslySetInnerHTML={{ __html: formatAnalysis(analysis) }}
-            />
-          </div>
-
-          <div className="flex gap-2 pt-2">
+        {/* Analysis button (when key is set) */}
+        {apiKey && !analysis && (
+          <>
             <button
               onClick={runAnalysis}
               disabled={loading}
-              className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors"
+              className="app-btn-purple"
+              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}
             >
-              Re-analyze
+              {loading ? (
+                <>
+                  <svg style={{ width: "18px", height: "18px", animation: "spin 1s linear infinite" }} viewBox="0 0 24 24" fill="none">
+                    <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Analyzing photos...
+                </>
+              ) : (
+                <>
+                  <svg style={{ width: "18px", height: "18px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Run AI Analysis
+                </>
+              )}
             </button>
+
             <button
               onClick={() => {
-                navigator.clipboard.writeText(analysis);
+                localStorage.removeItem("ba-gemini-key");
+                localStorage.removeItem("ba-ai-provider");
+                setApiKey(null);
               }}
-              className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors"
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                fontFamily: "var(--font-mono)", fontSize: "12px",
+                color: "var(--text-light)", textDecoration: "underline",
+                padding: "4px"
+              }}
             >
-              Copy to Clipboard
+              Change API key
+            </button>
+          </>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div style={{
+            background: "rgba(255,107,107,0.08)",
+            border: "2px solid var(--coral)",
+            borderRadius: "12px",
+            padding: "14px",
+            fontFamily: "var(--font-mono)", fontSize: "13px",
+            color: "var(--coral)"
+          }}>
+            {error}
+            <button
+              onClick={runAnalysis}
+              style={{
+                marginLeft: "8px", background: "none", border: "none",
+                cursor: "pointer", textDecoration: "underline",
+                color: "var(--coral)", fontFamily: "var(--font-mono)", fontSize: "13px"
+              }}
+            >
+              Retry
             </button>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Analysis results */}
+        {analysis && (
+          <>
+            <div
+              className="ai-results-text"
+              style={{ whiteSpace: "pre-wrap" }}
+              dangerouslySetInnerHTML={{ __html: formatAnalysis(analysis) }}
+            />
+            <div style={{ display: "flex", gap: "12px", paddingTop: "8px" }}>
+              <button onClick={runAnalysis} disabled={loading} className="app-btn-secondary" style={{ flex: 1 }}>
+                Re-analyze
+              </button>
+              <button
+                onClick={() => navigator.clipboard.writeText(analysis)}
+                className="app-btn-secondary"
+                style={{ flex: 1 }}
+              >
+                Copy to Clipboard
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
 function formatAnalysis(text: string): string {
   return text
-    .replace(/\*\*(.*?)\*\*/g, "<strong class='text-white'>$1</strong>")
-    .replace(/^### (.*$)/gm, "<h4 class='text-indigo-300 font-semibold mt-3 mb-1'>$1</h4>")
-    .replace(/^## (.*$)/gm, "<h3 class='text-indigo-200 font-bold mt-4 mb-1'>$1</h3>")
-    .replace(/^- (.*$)/gm, "<div class='pl-3 py-0.5'>• $1</div>")
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/^### (.*$)/gm, "<h4>$1</h4>")
+    .replace(/^## (.*$)/gm, "<h3>$1</h3>")
+    .replace(/^- (.*$)/gm, "<div style='padding-left: 12px; padding: 2px 0 2px 12px;'>&#x2022; $1</div>")
     .replace(
       /Score:\s*(\d+)\/10/g,
       (_, score) => {
         const n = parseInt(score);
-        const color = n >= 8 ? "text-green-400" : n >= 5 ? "text-yellow-400" : "text-red-400";
-        return `<span class="${color} font-bold">Score: ${score}/10</span>`;
+        const color = n >= 8 ? "var(--green)" : n >= 5 ? "var(--yellow-check)" : "var(--coral)";
+        return `<span style="color:${color};font-weight:700;">Score: ${score}/10</span>`;
       }
     );
 }

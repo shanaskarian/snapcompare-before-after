@@ -9,10 +9,10 @@ interface Props {
 }
 
 interface LightingInfo {
-  overall: number; // 0-100
+  overall: number;
   leftSide: number;
   rightSide: number;
-  balance: number; // 0-100, 100 = perfectly balanced
+  balance: number;
   quality: "poor" | "fair" | "good" | "excellent";
 }
 
@@ -37,7 +37,7 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
   const [lighting, setLighting] = useState<LightingInfo | null>(null);
   const [faceInfo, setFaceInfo] = useState<FaceInfo | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [showGuide, setShowGuide] = useState(true);
   const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
 
@@ -97,14 +97,9 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
       canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0);
 
-      // Simple face detection using skin-color heuristic + center-mass
-      // (MediaPipe loaded separately for production; this is a fast built-in approach)
       const w = canvas.width;
       const h = canvas.height;
-      const smallW = Math.floor(w / 8);
-      const smallH = Math.floor(h / 8);
 
-      // Sample center region for face-like colors
       const centerX = Math.floor(w * 0.3);
       const centerW = Math.floor(w * 0.4);
       const centerY = Math.floor(h * 0.1);
@@ -112,7 +107,7 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
 
       let facePixels: { x: number; y: number }[] = [];
       const imgData = ctx.getImageData(centerX, centerY, centerW, centerH);
-      const step = 4; // sample every 4th pixel for speed
+      const step = 4;
 
       for (let py = 0; py < centerH; py += step) {
         for (let px = 0; px < centerW; px += step) {
@@ -121,7 +116,6 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
           const g = imgData.data[i + 1];
           const b = imgData.data[i + 2];
 
-          // Skin color detection (simplified)
           if (
             r > 95 && g > 40 && b > 20 &&
             r > g && r > b &&
@@ -155,21 +149,14 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
 
         setFaceInfo({
           detected: true,
-          x: minX,
-          y: minY,
-          width: faceW,
-          height: faceH,
-          centered,
-          properSize,
+          x: minX, y: minY,
+          width: faceW, height: faceH,
+          centered, properSize,
         });
 
-        // Lighting analysis on the face region
         const faceData = ctx.getImageData(minX, minY, faceW, faceH);
         const halfW = Math.floor(faceW / 2);
-        let leftBrightness = 0,
-          rightBrightness = 0,
-          leftCount = 0,
-          rightCount = 0;
+        let leftBrightness = 0, rightBrightness = 0, leftCount = 0, rightCount = 0;
 
         for (let py = 0; py < faceH; py += 2) {
           for (let px = 0; px < faceW; px += 2) {
@@ -177,15 +164,9 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
             const brightness =
               (faceData.data[i] * 0.299 +
                 faceData.data[i + 1] * 0.587 +
-                faceData.data[i + 2] * 0.114) /
-              255;
-            if (px < halfW) {
-              leftBrightness += brightness;
-              leftCount++;
-            } else {
-              rightBrightness += brightness;
-              rightCount++;
-            }
+                faceData.data[i + 2] * 0.114) / 255;
+            if (px < halfW) { leftBrightness += brightness; leftCount++; }
+            else { rightBrightness += brightness; rightCount++; }
           }
         }
 
@@ -215,9 +196,7 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
         setLighting(null);
       }
 
-      // Draw overlay guide
       drawOverlay();
-
       animFrameRef.current = requestAnimationFrame(analyze);
     };
 
@@ -236,14 +215,13 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
     if (!ctx) return;
 
     ctx.clearRect(0, 0, overlay.width, overlay.height);
-
     if (!showGuide) return;
 
     const w = overlay.width;
     const h = overlay.height;
 
-    // Draw face guide oval
-    ctx.strokeStyle = "rgba(99, 102, 241, 0.6)";
+    // Face guide oval
+    ctx.strokeStyle = "rgba(108, 99, 255, 0.6)";
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 8]);
     ctx.beginPath();
@@ -263,17 +241,13 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
     ctx.lineTo(cx, cy + 15);
     ctx.stroke();
 
-    // Rule of thirds lines
+    // Rule of thirds
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
     ctx.beginPath();
-    ctx.moveTo(w / 3, 0);
-    ctx.lineTo(w / 3, h);
-    ctx.moveTo((2 * w) / 3, 0);
-    ctx.lineTo((2 * w) / 3, h);
-    ctx.moveTo(0, h / 3);
-    ctx.lineTo(w, h / 3);
-    ctx.moveTo(0, (2 * h) / 3);
-    ctx.lineTo(w, (2 * h) / 3);
+    ctx.moveTo(w / 3, 0); ctx.lineTo(w / 3, h);
+    ctx.moveTo((2 * w) / 3, 0); ctx.lineTo((2 * w) / 3, h);
+    ctx.moveTo(0, h / 3); ctx.lineTo(w, h / 3);
+    ctx.moveTo(0, (2 * h) / 3); ctx.lineTo(w, (2 * h) / 3);
     ctx.stroke();
   };
 
@@ -302,7 +276,6 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
     const ctx = captureCanvas.getContext("2d");
     if (!ctx) return;
 
-    // Flip horizontally if using front camera
     if (facingMode === "user") {
       ctx.translate(captureCanvas.width, 0);
       ctx.scale(-1, 1);
@@ -329,225 +302,237 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
     setCameraReady(false);
   };
 
-  const lightingColor = (quality: string) => {
-    switch (quality) {
-      case "excellent": return "text-green-400";
-      case "good": return "text-emerald-400";
-      case "fair": return "text-yellow-400";
-      default: return "text-red-400";
+  const qualityColor = (q: string) => {
+    switch (q) {
+      case "excellent": return "var(--green)";
+      case "good": return "#22C55E";
+      case "fair": return "var(--yellow-check)";
+      default: return "var(--coral)";
     }
   };
 
   // Captured preview mode
   if (capturedPreview) {
     return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1 relative bg-black flex items-center justify-center">
-          <img
-            src={capturedPreview}
-            alt="Captured"
-            className="max-h-full max-w-full object-contain"
-          />
-          <div className="absolute top-4 left-4 bg-black/70 px-3 py-1.5 rounded-lg text-sm font-medium">
-            Review {mode === "before" ? "Before" : "After"} Photo
+      <div style={{ padding: "24px", maxWidth: "600px", margin: "0 auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div className="preview-container" style={{ position: "relative" }}>
+            <img
+              src={capturedPreview}
+              alt="Captured"
+              style={{ width: "100%", display: "block" }}
+            />
+            <div style={{
+              position: "absolute", top: "12px", left: "12px",
+              fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 600,
+              padding: "4px 12px", borderRadius: "6px",
+              background: mode === "before" ? "rgba(59,130,246,0.85)" : "rgba(34,197,94,0.85)",
+              color: "white", textTransform: "uppercase", letterSpacing: "1px"
+            }}>
+              Review {mode === "before" ? "Before" : "After"} Photo
+            </div>
           </div>
-        </div>
-        <div className="bg-gray-900 p-4 flex gap-3">
-          <button
-            onClick={retakeCapture}
-            className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl font-medium transition-colors"
-          >
-            Retake
-          </button>
-          <button
-            onClick={confirmCapture}
-            className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-medium transition-colors"
-          >
-            Use This Photo
-          </button>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button onClick={retakeCapture} className="app-btn-secondary" style={{ flex: 1 }}>
+              Retake
+            </button>
+            <button onClick={confirmCapture} className="app-btn-primary" style={{ flex: 1 }}>
+              Use This Photo
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Camera viewport */}
-      <div className="flex-1 relative bg-black overflow-hidden">
-        <video
-          ref={videoRef}
-          playsInline
-          muted
-          className={`absolute inset-0 w-full h-full object-cover ${
-            facingMode === "user" ? "scale-x-[-1]" : ""
-          }`}
-        />
-        <canvas ref={canvasRef} className="hidden" />
-        <canvas
-          ref={overlayCanvasRef}
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-          style={facingMode === "user" ? { transform: "scaleX(-1)" } : {}}
-        />
+    <div style={{ padding: "24px", maxWidth: "600px", margin: "0 auto" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {/* Camera viewport */}
+        <div className="camera-viewport" style={{ position: "relative", aspectRatio: "3/4", maxHeight: "70vh" }}>
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            style={{
+              position: "absolute", inset: 0,
+              width: "100%", height: "100%",
+              objectFit: "cover",
+              transform: facingMode === "user" ? "scaleX(-1)" : "none",
+              borderRadius: "13px"
+            }}
+          />
+          <canvas ref={canvasRef} style={{ display: "none" }} />
+          <canvas
+            ref={overlayCanvasRef}
+            style={{
+              position: "absolute", inset: 0,
+              width: "100%", height: "100%",
+              objectFit: "cover",
+              pointerEvents: "none",
+              transform: facingMode === "user" ? "scaleX(-1)" : "none",
+              borderRadius: "13px"
+            }}
+          />
 
-        {/* Mode badge */}
-        <div className="absolute top-4 left-4 flex items-center gap-2">
-          <span
-            className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${
-              mode === "before"
-                ? "bg-blue-600/90"
-                : "bg-emerald-600/90"
-            }`}
-          >
-            {mode === "before" ? "BEFORE" : "AFTER"}
-          </span>
-        </div>
-
-        {/* Camera flip button */}
-        <button
-          onClick={toggleCamera}
-          className="absolute top-4 right-4 w-10 h-10 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center transition-colors"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        </button>
-
-        {/* Guide toggle */}
-        <button
-          onClick={() => setShowGuide(!showGuide)}
-          className="absolute top-4 right-16 w-10 h-10 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center transition-colors"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z" />
-          </svg>
-        </button>
-
-        {/* Countdown overlay */}
-        {countdown !== null && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20">
-            <span className="text-8xl font-bold animate-pulse">{countdown}</span>
-          </div>
-        )}
-
-        {/* Existing "before" thumbnail when capturing "after" */}
-        {mode === "after" && existingBefore && (
-          <div className="absolute bottom-4 left-4 z-10">
-            <div className="relative">
-              <img
-                src={existingBefore}
-                alt="Before reference"
-                className="w-24 h-32 object-cover rounded-lg border-2 border-blue-500 shadow-lg"
-              />
-              <span className="absolute -top-2 -right-2 bg-blue-600 text-xs px-1.5 py-0.5 rounded font-medium">
-                Before
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Controls panel */}
-      <div className="bg-gray-900 border-t border-gray-800 p-4 space-y-3 shrink-0">
-        {/* Lighting + Face status */}
-        <div className="flex items-center gap-4 text-xs">
-          {/* Face detection status */}
-          <div className="flex items-center gap-1.5">
-            <div
-              className={`w-2 h-2 rounded-full ${
-                faceInfo?.detected ? "bg-green-400" : "bg-red-400"
-              }`}
-            />
-            <span className="text-gray-400">
-              {faceInfo?.detected ? "Face detected" : "No face"}
+          {/* Mode badge */}
+          <div style={{ position: "absolute", top: "12px", left: "12px" }}>
+            <span className={`app-badge ${mode === "before" ? "app-badge-blue" : "app-badge-green"}`}>
+              {mode === "before" ? "BEFORE" : "AFTER"}
             </span>
           </div>
 
-          {faceInfo?.detected && (
-            <>
-              <div className="flex items-center gap-1.5">
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    faceInfo.centered ? "bg-green-400" : "bg-yellow-400"
-                  }`}
+          {/* Camera flip button */}
+          <button
+            onClick={toggleCamera}
+            style={{
+              position: "absolute", top: "12px", right: "12px",
+              width: "40px", height: "40px",
+              background: "rgba(0,0,0,0.5)", border: "2px solid rgba(255,255,255,0.3)",
+              borderRadius: "50%", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "white", transition: "all 0.2s"
+            }}
+          >
+            <svg style={{ width: "18px", height: "18px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+
+          {/* Guide toggle */}
+          <button
+            onClick={() => setShowGuide(!showGuide)}
+            style={{
+              position: "absolute", top: "12px", right: "60px",
+              width: "40px", height: "40px",
+              background: showGuide ? "rgba(108,99,255,0.5)" : "rgba(0,0,0,0.5)",
+              border: "2px solid rgba(255,255,255,0.3)",
+              borderRadius: "50%", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "white", transition: "all 0.2s"
+            }}
+          >
+            <svg style={{ width: "18px", height: "18px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z" />
+            </svg>
+          </button>
+
+          {/* Countdown overlay */}
+          {countdown !== null && (
+            <div style={{
+              position: "absolute", inset: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: "rgba(0,0,0,0.4)", zIndex: 20,
+              borderRadius: "13px"
+            }}>
+              <span style={{
+                fontFamily: "var(--font-display)",
+                fontSize: "96px", color: "white",
+                textShadow: "3px 3px 0 var(--ink)"
+              }}>{countdown}</span>
+            </div>
+          )}
+
+          {/* Before reference thumbnail when capturing after */}
+          {mode === "after" && existingBefore && (
+            <div style={{ position: "absolute", bottom: "12px", left: "12px", zIndex: 10 }}>
+              <div style={{ position: "relative" }}>
+                <img
+                  src={existingBefore}
+                  alt="Before reference"
+                  style={{
+                    width: "80px", height: "106px",
+                    objectFit: "cover", borderRadius: "10px",
+                    border: "3px solid #3B82F6",
+                    boxShadow: "3px 3px 0 rgba(0,0,0,0.3)"
+                  }}
                 />
-                <span className="text-gray-400">
-                  {faceInfo.centered ? "Centered" : "Off-center"}
-                </span>
+                <span style={{
+                  position: "absolute", top: "-6px", right: "-6px",
+                  fontFamily: "var(--font-mono)", fontSize: "9px", fontWeight: 600,
+                  background: "#3B82F6", color: "white",
+                  padding: "2px 6px", borderRadius: "4px",
+                  textTransform: "uppercase", letterSpacing: "0.5px"
+                }}>Before</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    faceInfo.properSize ? "bg-green-400" : "bg-yellow-400"
-                  }`}
-                />
-                <span className="text-gray-400">
-                  {faceInfo.properSize ? "Good framing" : "Adjust distance"}
-                </span>
-              </div>
-            </>
+            </div>
           )}
         </div>
 
-        {/* Lighting meter */}
-        {lighting && (
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-400">Lighting</span>
-              <span className={lightingColor(lighting.quality)}>
-                {lighting.quality.charAt(0).toUpperCase() +
-                  lighting.quality.slice(1)}{" "}
-                ({lighting.overall}%)
-              </span>
+        {/* Controls panel */}
+        <div className="camera-controls" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {/* Face + Lighting status */}
+          <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+            <div className="status-indicator">
+              <div className={faceInfo?.detected ? "status-dot-ok" : "status-dot-bad"} />
+              <span>{faceInfo?.detected ? "Face detected" : "No face"}</span>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-500 w-6">L:{lighting.leftSide}</span>
-              <div className="flex-1 relative h-2">
-                <div className="lighting-meter w-full h-full" />
-                <div
-                  className="lighting-indicator absolute top-1/2 -translate-y-1/2"
-                  style={{ left: `${lighting.overall}%` }}
-                />
-              </div>
-              <span className="text-xs text-gray-500 w-6">R:{lighting.rightSide}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-500">
-                Balance: {lighting.balance}%
-              </span>
-              {lighting.balance < 70 && (
-                <span className="text-yellow-400">
-                  {lighting.leftSide > lighting.rightSide
-                    ? "More light on right side needed"
-                    : "More light on left side needed"}
-                </span>
-              )}
-            </div>
+            {faceInfo?.detected && (
+              <>
+                <div className="status-indicator">
+                  <div className={faceInfo.centered ? "status-dot-ok" : "status-dot-warn"} />
+                  <span>{faceInfo.centered ? "Centered" : "Off-center"}</span>
+                </div>
+                <div className="status-indicator">
+                  <div className={faceInfo.properSize ? "status-dot-ok" : "status-dot-warn"} />
+                  <span>{faceInfo.properSize ? "Good framing" : "Adjust distance"}</span>
+                </div>
+              </>
+            )}
           </div>
-        )}
 
-        {/* Capture button */}
-        <div className="flex items-center justify-center pt-2">
-          <button
-            onClick={capturePhoto}
-            disabled={!cameraReady || countdown !== null}
-            className="relative w-20 h-20 rounded-full border-4 border-white/80 flex items-center justify-center disabled:opacity-40 group"
-          >
-            <div className="absolute inset-0 rounded-full border-4 border-indigo-400 opacity-0 group-hover:opacity-100 capture-btn-ring" />
-            <div
-              className={`w-14 h-14 rounded-full transition-colors ${
-                mode === "before"
-                  ? "bg-blue-500 group-hover:bg-blue-400"
-                  : "bg-emerald-500 group-hover:bg-emerald-400"
-              }`}
-            />
-          </button>
+          {/* Lighting meter */}
+          {lighting && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: "12px" }}>
+                <span style={{ color: "var(--text-light)" }}>Lighting</span>
+                <span style={{ color: qualityColor(lighting.quality), fontWeight: 600 }}>
+                  {lighting.quality.charAt(0).toUpperCase() + lighting.quality.slice(1)} ({lighting.overall}%)
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-light)", width: "28px" }}>L:{lighting.leftSide}</span>
+                <div style={{ flex: 1, position: "relative", height: "8px" }}>
+                  <div className="lighting-meter" style={{ width: "100%", height: "100%" }} />
+                  <div
+                    className="lighting-indicator"
+                    style={{
+                      position: "absolute", top: "50%", transform: "translate(-50%, -50%)",
+                      left: `${lighting.overall}%`,
+                      color: qualityColor(lighting.quality)
+                    }}
+                  />
+                </div>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-light)", width: "28px" }}>R:{lighting.rightSide}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: "11px" }}>
+                <span style={{ color: "var(--text-light)" }}>Balance: {lighting.balance}%</span>
+                {lighting.balance < 70 && (
+                  <span style={{ color: "var(--yellow-check)" }}>
+                    {lighting.leftSide > lighting.rightSide ? "More light on right side needed" : "More light on left side needed"}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Capture button */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "8px" }}>
+            <button
+              onClick={capturePhoto}
+              disabled={!cameraReady || countdown !== null}
+              className="capture-btn-outer"
+            >
+              <div className={`capture-btn-inner ${mode === "before" ? "capture-btn-before" : "capture-btn-after"}`} />
+            </button>
+          </div>
+
+          {!cameraReady && (
+            <p style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text-light)" }}>
+              Starting camera...
+            </p>
+          )}
         </div>
-
-        {!cameraReady && (
-          <p className="text-center text-sm text-gray-400">
-            Starting camera...
-          </p>
-        )}
       </div>
     </div>
   );
