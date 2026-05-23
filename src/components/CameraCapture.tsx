@@ -460,6 +460,15 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
     };
   }, [startCamera]);
 
+  // Re-attach stream to video element after preview is dismissed
+  // (the video element unmounts during preview and loses its srcObject)
+  useEffect(() => {
+    if (capturedPreview === null && streamRef.current && videoRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [capturedPreview]);
+
   // Store drawMesh in a ref so FaceMesh onResults always uses latest version without re-init
   const drawMeshRef = useRef(drawMeshFromResults);
   useEffect(() => { drawMeshRef.current = drawMeshFromResults; }, [drawMeshFromResults]);
