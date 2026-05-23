@@ -116,7 +116,13 @@ async function analyzeWithGemini(
 
   if (!response.ok) {
     const errBody = await response.text();
-    throw new Error(`Gemini API error (${response.status}): ${errBody}`);
+    if (response.status === 429) {
+      throw new Error("AI analysis quota exceeded. Please wait a minute and try again, or enable billing on your Google AI project for unlimited access.");
+    }
+    if (response.status === 403) {
+      throw new Error("API key is invalid or does not have access to Gemini. Please check your GEMINI_API_KEY in Railway.");
+    }
+    throw new Error(`AI analysis failed (error ${response.status}). Please try again.`);
   }
 
   const data = await response.json();

@@ -11,6 +11,14 @@ export interface FaceNodes {
   chinBottom: [number, number];
   noseBridge: [number, number];
   outerLips: [number, number][];
+  // Metrics for matching
+  interEyeDist: number;       // scale proxy
+  earToEarDist: number;       // scale proxy
+  headRotation: number;       // left-ear-to-nose / nose-to-right-ear ratio
+  headTilt: number;           // eye-line angle in degrees
+  faceBrightness: number;     // average face brightness 0-255
+  leftBrightness: number;     // left half brightness
+  rightBrightness: number;    // right half brightness
 }
 
 interface Props {
@@ -30,58 +38,168 @@ const CHIN = 152;
 const NOSE_BRIDGE = 6;
 const OUTER_LIP = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409, 270, 269, 267, 0, 37, 39, 40, 185, 61];
 
-// Threshold for position matching (normalized coordinates)
-const MATCH_THRESHOLD = 0.03; // ~3% of frame = green
-const CLOSE_THRESHOLD = 0.06; // ~6% of frame = yellow
+// Match thresholds
+const POSITION_THRESHOLD = 0.025;
+const SCALE_THRESHOLD = 0.15;       // 15% size difference allowed
+const ROTATION_THRESHOLD = 0.2;     // head rotation ratio tolerance
+const TILT_THRESHOLD = 5;           // degrees
+const BRIGHTNESS_THRESHOLD = 30;    // absolute brightness difference
 
 export default function CameraCapture({ mode, existingBefore, beforeLandmarks, onCapture }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const beforeOverlayRef = useRef<HTMLImageElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number>(0);
   const faceMeshRef = useRef<any>(null);
   const currentLandmarksRef = useRef<FaceNodes | null>(null);
 
+  // Use refs for values needed in FaceMesh callback to avoid re-init
+  const modeRef = useRef(mode);
+  const beforeLandmarksRef = useRef(beforeLandmarks);
+  const showGuideRef = useRef(true);
+  const facingModeRef = useRef<"user" | "environment">("user");
+
   const [cameraReady, setCameraReady] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
   const [matchStatus, setMatchStatus] = useState<"none" | "red" | "yellow" | "green">("none");
+  const [matchDetails, setMatchDetails] = useState({ position: false, scale: false, angle: false, lighting: false });
   const [countdown, setCountdown] = useState<number | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [showGuide, setShowGuide] = useState(true);
   const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
   const [meshLoading, setMeshLoading] = useState(true);
 
-  // Extract FaceNodes from MediaPipe landmarks
+  // Keep refs in sync
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => { beforeLandmarksRef.current = beforeLandmarks; }, [beforeLandmarks]);
+  useEffect(() => { showGuideRef.current = showGuide; }, [showGuide]);
+  useEffect(() => { facingModeRef.current = facingMode; }, [facingMode]);
+
+  // Extract FaceNodes from MediaPipe landmarks + compute metrics
   const extractNodes = useCallback((landmarks: any[]): FaceNodes => {
+    const leftEye: [number, number] = [landmarks[LEFT_IRIS].x, landmarks[LEFT_IRIS].y];
+    const rightEye: [number, number] = [landmarks[RIGHT_IRIS].x, landmarks[RIGHT_IRIS].y];
+    const noseTip: [number, number] = [landmarks[NOSE_TIP].x, landmarks[NOSE_TIP].y];
+    const leftEar: [number, number] = [landmarks[LEFT_EAR].x, landmarks[LEFT_EAR].y];
+    const rightEar: [number, number] = [landmarks[RIGHT_EAR].x, landmarks[RIGHT_EAR].y];
+    const chinBottom: [number, number] = [landmarks[CHIN].x, landmarks[CHIN].y];
+    const noseBridge: [number, number] = [landmarks[NOSE_BRIDGE].x, landmarks[NOSE_BRIDGE].y];
+
+    const interEyeDist = Math.sqrt((leftEye[0] - rightEye[0]) ** 2 + (leftEye[1] - rightEye[1]) ** 2);
+    const earToEarDist = Math.sqrt((leftEar[0] - rightEar[0]) ** 2 + (leftEar[1] - rightEar[1]) ** 2);
+
+    const leftEarToNose = Math.sqrt((leftEar[0] - noseTip[0]) ** 2 + (leftEar[1] - noseTip[1]) ** 2);
+    const rightEarToNose = Math.sqrt((rightEar[0] - noseTip[0]) ** 2 + (rightEar[1] - noseTip[1]) ** 2);
+    const headRotation = rightEarToNose > 0.001 ? leftEarToNose / rightEarToNose : 1;
+
+    const eyeDx = rightEye[0] - leftEye[0];
+    const eyeDy = rightEye[1] - leftEye[1];
+    const headTilt = Math.atan2(eyeDy, eyeDx) * (180 / Math.PI);
+
     return {
-      leftEye: [landmarks[LEFT_IRIS].x, landmarks[LEFT_IRIS].y],
-      rightEye: [landmarks[RIGHT_IRIS].x, landmarks[RIGHT_IRIS].y],
-      noseTip: [landmarks[NOSE_TIP].x, landmarks[NOSE_TIP].y],
-      leftEar: [landmarks[LEFT_EAR].x, landmarks[LEFT_EAR].y],
-      rightEar: [landmarks[RIGHT_EAR].x, landmarks[RIGHT_EAR].y],
-      chinBottom: [landmarks[CHIN].x, landmarks[CHIN].y],
-      noseBridge: [landmarks[NOSE_BRIDGE].x, landmarks[NOSE_BRIDGE].y],
+      leftEye, rightEye, noseTip, leftEar, rightEar, chinBottom, noseBridge,
       outerLips: OUTER_LIP.map((i) => [landmarks[i].x, landmarks[i].y] as [number, number]),
+      interEyeDist, earToEarDist, headRotation, headTilt,
+      faceBrightness: 0, leftBrightness: 0, rightBrightness: 0, // filled by analyzeBrightness
     };
   }, []);
 
-  // Compare two sets of landmarks, return average distance
-  const compareLandmarks = useCallback((current: FaceNodes, target: FaceNodes): number => {
-    const keys: (keyof Omit<FaceNodes, "outerLips">)[] = [
+  // Analyze face brightness from the hidden canvas
+  const analyzeBrightness = useCallback((nodes: FaceNodes): FaceNodes => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video || video.readyState < 2) return nodes;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return nodes;
+
+    ctx.drawImage(video, 0, 0);
+    const w = canvas.width;
+    const h = canvas.height;
+
+    // Sample face region between ears and from eyes to chin
+    const faceLeft = Math.floor(Math.min(nodes.leftEar[0], nodes.leftEye[0]) * w);
+    const faceRight = Math.ceil(Math.max(nodes.rightEar[0], nodes.rightEye[0]) * w);
+    const faceTop = Math.floor(Math.min(nodes.leftEye[1], nodes.rightEye[1]) * h) - 20;
+    const faceBottom = Math.ceil(nodes.chinBottom[1] * h);
+    const faceW = Math.max(1, faceRight - faceLeft);
+    const faceH = Math.max(1, faceBottom - faceTop);
+    const faceMidX = faceLeft + faceW / 2;
+
+    try {
+      const imgData = ctx.getImageData(
+        Math.max(0, faceLeft), Math.max(0, faceTop),
+        Math.min(faceW, w - faceLeft), Math.min(faceH, h - faceTop)
+      );
+      let totalBright = 0, leftBright = 0, rightBright = 0;
+      let totalCount = 0, leftCount = 0, rightCount = 0;
+      const step = 4;
+
+      for (let py = 0; py < imgData.height; py += step) {
+        for (let px = 0; px < imgData.width; px += step) {
+          const i = (py * imgData.width + px) * 4;
+          const brightness = imgData.data[i] * 0.299 + imgData.data[i + 1] * 0.587 + imgData.data[i + 2] * 0.114;
+          totalBright += brightness;
+          totalCount++;
+          if ((faceLeft + px) < faceMidX) { leftBright += brightness; leftCount++; }
+          else { rightBright += brightness; rightCount++; }
+        }
+      }
+
+      return {
+        ...nodes,
+        faceBrightness: totalCount > 0 ? totalBright / totalCount : 0,
+        leftBrightness: leftCount > 0 ? leftBright / leftCount : 0,
+        rightBrightness: rightCount > 0 ? rightBright / rightCount : 0,
+      };
+    } catch {
+      return nodes;
+    }
+  }, []);
+
+  // Compare current vs before landmarks — returns detailed match info
+  const compareDetailed = useCallback((current: FaceNodes, target: FaceNodes) => {
+    // Position: average landmark distance
+    const posKeys: (keyof Pick<FaceNodes, "leftEye" | "rightEye" | "noseTip" | "leftEar" | "rightEar" | "chinBottom">)[] = [
       "leftEye", "rightEye", "noseTip", "leftEar", "rightEar", "chinBottom",
     ];
     let totalDist = 0;
-    for (const key of keys) {
+    for (const key of posKeys) {
       const c = current[key] as [number, number];
       const t = target[key] as [number, number];
       totalDist += Math.sqrt((c[0] - t[0]) ** 2 + (c[1] - t[1]) ** 2);
     }
-    return totalDist / keys.length;
+    const avgDist = totalDist / posKeys.length;
+
+    // Scale: compare inter-eye distance ratio
+    const scaleRatio = target.interEyeDist > 0.001 ? current.interEyeDist / target.interEyeDist : 1;
+    const scaleDiff = Math.abs(1 - scaleRatio);
+
+    // Angle: head rotation and tilt
+    const rotationDiff = Math.abs(current.headRotation - target.headRotation);
+    const tiltDiff = Math.abs(current.headTilt - target.headTilt);
+
+    // Lighting: brightness difference
+    const brightDiff = Math.abs(current.faceBrightness - target.faceBrightness);
+    const balanceDiff = Math.abs(
+      (current.leftBrightness - current.rightBrightness) -
+      (target.leftBrightness - target.rightBrightness)
+    );
+
+    const positionOk = avgDist < POSITION_THRESHOLD;
+    const scaleOk = scaleDiff < SCALE_THRESHOLD;
+    const angleOk = rotationDiff < ROTATION_THRESHOLD && tiltDiff < TILT_THRESHOLD;
+    const lightingOk = brightDiff < BRIGHTNESS_THRESHOLD && balanceDiff < BRIGHTNESS_THRESHOLD;
+
+    return { positionOk, scaleOk, angleOk, lightingOk, allMatch: positionOk && scaleOk && angleOk && lightingOk };
   }, []);
 
-  // Draw face mesh overlay
-  const drawMesh = useCallback((landmarks: any[]) => {
+  // Draw face mesh overlay — called from FaceMesh onResults via ref
+  const drawMeshFromResults = useCallback((landmarks: any[]) => {
     const overlay = overlayCanvasRef.current;
     const video = videoRef.current;
     if (!overlay || !video) return;
@@ -93,42 +211,52 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
     const ctx = overlay.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
-    if (!showGuide) return;
+    if (!showGuideRef.current) return;
 
-    const nodes = extractNodes(landmarks);
+    let nodes = extractNodes(landmarks);
+    nodes = analyzeBrightness(nodes);
     currentLandmarksRef.current = nodes;
 
-    // Determine match color
-    let lineColor = "rgba(255, 107, 107, 0.9)"; // red default
+    const curMode = modeRef.current;
+    const curBeforeLandmarks = beforeLandmarksRef.current;
+
+    // Determine match color and status
+    let lineColor = "rgba(255, 107, 107, 0.9)";
     let nodeColor = "rgba(255, 107, 107, 0.95)";
     let status: "none" | "red" | "yellow" | "green" = "red";
+    let details = { position: false, scale: false, angle: false, lighting: false };
 
-    if (mode === "after" && beforeLandmarks) {
-      const dist = compareLandmarks(nodes, beforeLandmarks);
-      if (dist < MATCH_THRESHOLD) {
+    if (curMode === "after" && curBeforeLandmarks) {
+      const match = compareDetailed(nodes, curBeforeLandmarks);
+      details = { position: match.positionOk, scale: match.scaleOk, angle: match.angleOk, lighting: match.lightingOk };
+
+      const matchCount = [match.positionOk, match.scaleOk, match.angleOk, match.lightingOk].filter(Boolean).length;
+
+      if (match.allMatch) {
         lineColor = "rgba(34, 197, 94, 0.9)";
         nodeColor = "rgba(34, 197, 94, 0.95)";
         status = "green";
-      } else if (dist < CLOSE_THRESHOLD) {
+      } else if (matchCount >= 2) {
         lineColor = "rgba(251, 191, 36, 0.9)";
         nodeColor = "rgba(251, 191, 36, 0.95)";
         status = "yellow";
       }
-    } else if (mode === "before") {
-      // For "before" mode, just show white/neutral landmarks
+    } else if (curMode === "before") {
       lineColor = "rgba(108, 99, 255, 0.8)";
       nodeColor = "rgba(108, 99, 255, 0.95)";
       status = "none";
     }
 
     setMatchStatus(status);
+    setMatchDetails(details);
+    setFaceDetected(true);
 
     // Helper: convert normalized to pixel
     const px = (x: number) => x * w;
     const py = (y: number) => y * h;
 
-    // Draw connection lines between nodes
-    const connections: [keyof Omit<FaceNodes, "outerLips">, keyof Omit<FaceNodes, "outerLips">][] = [
+    // Draw connection lines
+    const connections: [keyof Pick<FaceNodes, "leftEar" | "leftEye" | "noseBridge" | "rightEye" | "rightEar" | "noseTip" | "chinBottom">, keyof Pick<FaceNodes, "leftEar" | "leftEye" | "noseBridge" | "rightEye" | "rightEar" | "noseTip" | "chinBottom">][] = [
       ["leftEar", "leftEye"],
       ["leftEye", "noseBridge"],
       ["noseBridge", "rightEye"],
@@ -162,7 +290,7 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
     ctx.closePath();
     ctx.stroke();
 
-    // Draw nodes (dots) on key landmarks
+    // Draw nodes
     const nodePoints: [number, number][] = [
       nodes.leftEye, nodes.rightEye, nodes.noseTip,
       nodes.leftEar, nodes.rightEar, nodes.noseBridge,
@@ -177,7 +305,7 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
       ctx.stroke();
     }
 
-    // Draw shoulder guide line estimated from chin + ear positions
+    // Shoulder guide line
     const shoulderY = nodes.chinBottom[1] + (nodes.chinBottom[1] - nodes.noseBridge[1]) * 0.8;
     const shoulderSpan = Math.abs(nodes.leftEar[0] - nodes.rightEar[0]) * 1.8;
     const shoulderCX = (nodes.leftEar[0] + nodes.rightEar[0]) / 2;
@@ -191,14 +319,22 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
     ctx.setLineDash([]);
 
     // Status text
-    const isSelfie = facingMode === "user";
+    const isSelfie = facingModeRef.current === "user";
     const fontSize = Math.max(14, Math.round(w * 0.028));
     let statusText = "Face detected";
-    if (mode === "after" && beforeLandmarks) {
+    if (curMode === "after" && curBeforeLandmarks) {
       if (status === "green") statusText = "Perfect match! Hold steady";
-      else if (status === "yellow") statusText = "Almost there — adjust slightly";
-      else statusText = "Align face to match before photo";
-    } else if (mode === "before") {
+      else if (status === "yellow") {
+        const missing: string[] = [];
+        if (!details.position) missing.push("position");
+        if (!details.scale) missing.push("distance");
+        if (!details.angle) missing.push("angle");
+        if (!details.lighting) missing.push("lighting");
+        statusText = `Adjust: ${missing.join(", ")}`;
+      } else {
+        statusText = "Align face to match before photo";
+      }
+    } else if (curMode === "before") {
       statusText = "Position your face — hold steady";
     }
 
@@ -224,12 +360,12 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
 
     const textColor = status === "green" ? "rgba(34,197,94,0.95)" :
                       status === "yellow" ? "rgba(251,191,36,0.95)" :
-                      mode === "before" ? "rgba(108,99,255,0.95)" :
+                      curMode === "before" ? "rgba(108,99,255,0.95)" :
                       "rgba(255,107,107,0.95)";
     ctx.fillStyle = textColor;
     ctx.fillText(statusText, cx, textY + 4);
     ctx.restore();
-  }, [showGuide, facingMode, mode, beforeLandmarks, extractNodes, compareLandmarks]);
+  }, [extractNodes, analyzeBrightness, compareDetailed]);
 
   // Draw "no face" overlay
   const drawNoFaceOverlay = useCallback(() => {
@@ -244,14 +380,13 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
     const ctx = overlay.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
-    if (!showGuide) return;
+    if (!showGuideRef.current) return;
 
     const cx = w / 2;
     const cy = h * 0.38;
     const rx = w * 0.2;
     const ry = h * 0.28;
 
-    // Dim area outside oval
     ctx.save();
     ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
     ctx.fillRect(0, 0, w, h);
@@ -261,15 +396,13 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
     ctx.fill();
     ctx.restore();
 
-    // Oval guide
     ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Status text
-    const isSelfie = facingMode === "user";
+    const isSelfie = facingModeRef.current === "user";
     const fontSize = Math.max(14, Math.round(w * 0.028));
     ctx.save();
     if (isSelfie) {
@@ -280,7 +413,7 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
 
-    const statusText = meshLoading ? "Loading face detection..." : "Position your face in the oval";
+    const statusText = "Position your face in the oval";
     const textY = cy + ry + 20;
     const textMetrics = ctx.measureText(statusText);
     const pillW = textMetrics.width + 24;
@@ -294,7 +427,7 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
     ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
     ctx.fillText(statusText, cx, textY + 4);
     ctx.restore();
-  }, [showGuide, facingMode, meshLoading]);
+  }, []);
 
   // Start camera
   const startCamera = useCallback(async () => {
@@ -327,15 +460,27 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
     };
   }, [startCamera]);
 
-  // Initialize MediaPipe FaceMesh
+  // Store drawMesh in a ref so FaceMesh onResults always uses latest version without re-init
+  const drawMeshRef = useRef(drawMeshFromResults);
+  useEffect(() => { drawMeshRef.current = drawMeshFromResults; }, [drawMeshFromResults]);
+
+  const drawNoFaceRef = useRef(drawNoFaceOverlay);
+  useEffect(() => { drawNoFaceRef.current = drawNoFaceOverlay; }, [drawNoFaceOverlay]);
+
+  // Initialize MediaPipe FaceMesh — runs ONCE when camera is ready
   useEffect(() => {
     if (!cameraReady) return;
 
     let cancelled = false;
 
     const initFaceMesh = async () => {
+      // If already initialized, skip
+      if (faceMeshRef.current) {
+        setMeshLoading(false);
+        return;
+      }
+
       try {
-        // Dynamic import for SSR safety
         const faceMeshModule = await import("@mediapipe/face_mesh");
         const FaceMesh = faceMeshModule.FaceMesh;
 
@@ -354,13 +499,13 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
         mesh.onResults((results: any) => {
           if (cancelled) return;
           if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-            setFaceDetected(true);
-            drawMesh(results.multiFaceLandmarks[0]);
+            drawMeshRef.current(results.multiFaceLandmarks[0]);
           } else {
             setFaceDetected(false);
             currentLandmarksRef.current = null;
             setMatchStatus("none");
-            drawNoFaceOverlay();
+            setMatchDetails({ position: false, scale: false, angle: false, lighting: false });
+            drawNoFaceRef.current();
           }
         });
 
@@ -379,7 +524,7 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
     return () => {
       cancelled = true;
     };
-  }, [cameraReady, drawMesh, drawNoFaceOverlay]);
+  }, [cameraReady]); // Only depends on cameraReady — no more drawMesh dependency!
 
   // Send video frames to FaceMesh
   useEffect(() => {
@@ -402,7 +547,6 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
       }
 
       if (running) {
-        // Throttle to ~15fps for performance
         setTimeout(() => {
           if (running) animFrameRef.current = requestAnimationFrame(sendFrame);
         }, 50);
@@ -417,7 +561,7 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
     };
   }, [cameraReady, meshLoading]);
 
-  // Draw no-face overlay when guide toggled and no face
+  // Redraw overlay when guide is toggled
   useEffect(() => {
     if (!faceDetected) {
       drawNoFaceOverlay();
@@ -473,7 +617,14 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
   const toggleCamera = () => {
     setFacingMode((prev) => (prev === "user" ? "environment" : "user"));
     setCameraReady(false);
+    faceMeshRef.current = null; // Reset so it re-inits with new camera
+    setMeshLoading(true);
   };
+
+  // In "after" mode, capture is only allowed when all checks pass (green)
+  const canCapture = mode === "before"
+    ? cameraReady && countdown === null
+    : cameraReady && countdown === null && matchStatus === "green";
 
   // Captured preview mode
   if (capturedPreview) {
@@ -523,6 +674,25 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
             }}
           />
           <canvas ref={canvasRef} style={{ display: "none" }} />
+
+          {/* Transparent before photo overlay for "after" mode */}
+          {mode === "after" && existingBefore && (
+            <img
+              ref={beforeOverlayRef}
+              src={existingBefore}
+              alt=""
+              style={{
+                position: "absolute", inset: 0,
+                width: "100%", height: "100%",
+                objectFit: "cover",
+                opacity: 0.12,
+                pointerEvents: "none",
+                borderRadius: "13px",
+                zIndex: 5,
+              }}
+            />
+          )}
+
           <canvas
             ref={overlayCanvasRef}
             style={{
@@ -531,12 +701,13 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
               objectFit: "cover",
               pointerEvents: "none",
               transform: facingMode === "user" ? "scaleX(-1)" : "none",
-              borderRadius: "13px"
+              borderRadius: "13px",
+              zIndex: 6,
             }}
           />
 
           {/* Mode badge */}
-          <div style={{ position: "absolute", top: "12px", left: "12px" }}>
+          <div style={{ position: "absolute", top: "12px", left: "12px", zIndex: 10 }}>
             <span className={`app-badge ${mode === "before" ? "app-badge-blue" : "app-badge-green"}`}>
               {mode === "before" ? "BEFORE" : "AFTER"}
             </span>
@@ -546,7 +717,7 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
           <button
             onClick={toggleCamera}
             style={{
-              position: "absolute", top: "12px", right: "12px",
+              position: "absolute", top: "12px", right: "12px", zIndex: 10,
               width: "40px", height: "40px",
               background: "rgba(0,0,0,0.5)", border: "2px solid rgba(255,255,255,0.3)",
               borderRadius: "50%", cursor: "pointer",
@@ -563,7 +734,7 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
           <button
             onClick={() => setShowGuide(!showGuide)}
             style={{
-              position: "absolute", top: "12px", right: "60px",
+              position: "absolute", top: "12px", right: "60px", zIndex: 10,
               width: "40px", height: "40px",
               background: showGuide ? "rgba(108,99,255,0.5)" : "rgba(0,0,0,0.5)",
               border: "2px solid rgba(255,255,255,0.3)",
@@ -593,7 +764,7 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
             </div>
           )}
 
-          {/* Before reference thumbnail when capturing after */}
+          {/* Small before reference thumbnail (bottom-left) */}
           {mode === "after" && existingBefore && (
             <div style={{ position: "absolute", bottom: "12px", left: "12px", zIndex: 10 }}>
               <div style={{ position: "relative" }}>
@@ -622,18 +793,30 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
         {/* Controls panel */}
         <div className="camera-controls" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {/* Face detection status */}
-          <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
             <div className="status-indicator">
               <div className={faceDetected ? "status-dot-ok" : "status-dot-bad"} />
               <span>{meshLoading ? "Loading..." : faceDetected ? "Face detected" : "No face"}</span>
             </div>
             {mode === "after" && beforeLandmarks && faceDetected && (
-              <div className="status-indicator">
-                <div className={matchStatus === "green" ? "status-dot-ok" : matchStatus === "yellow" ? "status-dot-warn" : "status-dot-bad"} />
-                <span>
-                  {matchStatus === "green" ? "Position matched" : matchStatus === "yellow" ? "Almost aligned" : "Align to before"}
-                </span>
-              </div>
+              <>
+                <div className="status-indicator">
+                  <div className={matchDetails.position ? "status-dot-ok" : "status-dot-bad"} />
+                  <span>Position</span>
+                </div>
+                <div className="status-indicator">
+                  <div className={matchDetails.scale ? "status-dot-ok" : "status-dot-bad"} />
+                  <span>Scale</span>
+                </div>
+                <div className="status-indicator">
+                  <div className={matchDetails.angle ? "status-dot-ok" : "status-dot-bad"} />
+                  <span>Angle</span>
+                </div>
+                <div className="status-indicator">
+                  <div className={matchDetails.lighting ? "status-dot-ok" : "status-dot-bad"} />
+                  <span>Lighting</span>
+                </div>
+              </>
             )}
           </div>
 
@@ -641,12 +824,20 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "8px" }}>
             <button
               onClick={capturePhoto}
-              disabled={!cameraReady || countdown !== null}
+              disabled={!canCapture}
               className="capture-btn-outer"
+              style={{ opacity: canCapture ? 1 : 0.4, cursor: canCapture ? "pointer" : "not-allowed" }}
             >
               <div className={`capture-btn-inner ${mode === "before" ? "capture-btn-before" : "capture-btn-after"}`} />
             </button>
           </div>
+
+          {/* Helpful message when button is locked */}
+          {mode === "after" && !canCapture && faceDetected && (
+            <p style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--coral)" }}>
+              Align all indicators to green to capture
+            </p>
+          )}
 
           {!cameraReady && (
             <p style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text-light)" }}>
