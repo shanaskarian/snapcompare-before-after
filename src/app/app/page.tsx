@@ -12,19 +12,30 @@ export default function AppPage() {
   const [view, setView] = useState<AppView>("sessions");
   const [currentSession, setCurrentSession] = useState<PhotoSession | null>(null);
   const [captureMode, setCaptureMode] = useState<"before" | "after">("before");
+  const [isRetaking, setIsRetaking] = useState(false);
 
   const handlePhotoCapture = (photoDataUrl: string) => {
     if (!currentSession) return;
     const updated = { ...currentSession };
     if (captureMode === "before") {
       updated.beforePhoto = photoDataUrl;
-      setCaptureMode("after");
     } else {
       updated.afterPhoto = photoDataUrl;
     }
     setCurrentSession(updated);
     saveSession(updated);
-    if (captureMode === "after") setView("compare");
+
+    if (isRetaking) {
+      // Return to compare view after retaking a single photo
+      setIsRetaking(false);
+      setView("compare");
+    } else if (captureMode === "before") {
+      // Normal flow: advance to after capture
+      setCaptureMode("after");
+    } else {
+      // Normal flow: both photos done, go to compare
+      setView("compare");
+    }
   };
 
   const saveSession = (session: PhotoSession) => {
@@ -59,6 +70,7 @@ export default function AppPage() {
 
   const retakePhoto = (mode: "before" | "after") => {
     setCaptureMode(mode);
+    setIsRetaking(true);
     setView("capture");
   };
 

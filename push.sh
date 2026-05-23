@@ -1,5 +1,6 @@
 #!/bin/bash
 cd "$(dirname "$0")"
+rm -f .git/index.lock
 git add -A
-git commit -m "Full UI redesign: match landing page identity + fix camera"
+git commit -m "Fix retake photo + add live face positioning guide"
 git push origin main

@@ -147,12 +147,13 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
         const properSize =
           faceArea > frameArea * 0.04 && faceArea < frameArea * 0.45;
 
-        setFaceInfo({
+        const currentFace: FaceInfo = {
           detected: true,
           x: minX, y: minY,
           width: faceW, height: faceH,
           centered, properSize,
-        });
+        };
+        setFaceInfo(currentFace);
 
         const faceData = ctx.getImageData(minX, minY, faceW, faceH);
         const halfW = Math.floor(faceW / 2);
@@ -187,16 +188,18 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
           balance: Math.round(balance),
           quality,
         });
+        drawOverlay(currentFace);
       } else {
-        setFaceInfo({
+        const noFace: FaceInfo = {
           detected: false,
           x: 0, y: 0, width: 0, height: 0,
           centered: false, properSize: false,
-        });
+        };
+        setFaceInfo(noFace);
         setLighting(null);
+        drawOverlay(noFace);
       }
 
-      drawOverlay();
       animFrameRef.current = requestAnimationFrame(analyze);
     };
 
@@ -204,7 +207,7 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
     return () => cancelAnimationFrame(animFrameRef.current);
   }, [cameraReady, showGuide]);
 
-  const drawOverlay = () => {
+  const drawOverlay = (currentFaceInfo: FaceInfo | null) => {
     const overlay = overlayCanvasRef.current;
     const video = videoRef.current;
     if (!overlay || !video) return;
@@ -219,36 +222,144 @@ export default function CameraCapture({ mode, existingBefore, onCapture }: Props
 
     const w = overlay.width;
     const h = overlay.height;
+    const cx = w / 2;
+    const cy = h * 0.38;
+    const rx = w * 0.2;
+    const ry = h * 0.28;
 
-    // Face guide oval
-    ctx.strokeStyle = "rgba(108, 99, 255, 0.6)";
-    ctx.lineWidth = 2;
-    ctx.setLineDash([8, 8]);
+    // Determine guide color based on face position
+    const face = currentFaceInfo;
+    let guideColor = "rgba(255, 255, 255, 0.5)"; // default white — no face
+    let glowColor = "rgba(255, 255, 255, 0.08)";
+    let statusText = "Position your face in the oval";
+
+    if (face?.detected) {
+      if (face.centered && face.properSize) {
+        guideColor = "rgba(34, 197, 94, 0.85)"; // green — perfect
+        glowColor = "rgba(34, 197, 94, 0.12)";
+        statusText = "Perfect! Hold steady";
+      } else if (face.centered || face.properSize) {
+        guideColor = "rgba(251, 191, 36, 0.85)"; // yellow — close
+        glowColor = "rgba(251, 191, 36, 0.1)";
+        statusText = !face.centered ? "Move to center" : "Adjust distance";
+      } else {
+        guideColor = "rgba(255, 107, 107, 0.8)"; // coral — misaligned
+        glowColor = "rgba(255, 107, 107, 0.1)";
+        statusText = "Align face with oval";
+      }
+    }
+
+    // Dim area outside the oval guide
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+    ctx.fillRect(0, 0, w, h);
+    // Cut out the oval
+    ctx.globalCompositeOperation = "destination-out";
     ctx.beginPath();
-    ctx.ellipse(w / 2, h * 0.4, w * 0.18, h * 0.3, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, rx + 10, ry + 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Inner glow around oval
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx + 6, ry + 6, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = 12;
+    ctx.stroke();
+    ctx.restore();
+
+    // Main face guide oval
+    ctx.strokeStyle = guideColor;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Corner brackets on the oval for visual anchoring
+    const bracketLen = 20;
+    ctx.strokeStyle = guideColor;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([]);
+
+    // Top bracket
+    ctx.beginPath();
+    ctx.moveTo(cx - bracketLen, cy - ry);
+    ctx.lineTo(cx + bracketLen, cy - ry);
+    ctx.stroke();
+
+    // Bottom bracket
+    ctx.beginPath();
+    ctx.moveTo(cx - bracketLen, cy + ry);
+    ctx.lineTo(cx + bracketLen, cy + ry);
+    ctx.stroke();
+
+    // Left bracket
+    ctx.beginPath();
+    ctx.moveTo(cx - rx, cy - bracketLen);
+    ctx.lineTo(cx - rx, cy + bracketLen);
+    ctx.stroke();
+
+    // Right bracket
+    ctx.beginPath();
+    ctx.moveTo(cx + rx, cy - bracketLen);
+    ctx.lineTo(cx + rx, cy + bracketLen);
+    ctx.stroke();
+
+    // Center crosshair (subtle)
+    ctx.strokeStyle = "rgba(255,255,255,0.2)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(cx - 12, cy);
+    ctx.lineTo(cx + 12, cy);
+    ctx.moveTo(cx, cy - 12);
+    ctx.lineTo(cx, cy + 12);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Center crosshair
-    const cx = w / 2;
-    const cy = h * 0.4;
-    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    // Eye level guide lines
+    const eyeY = cy - ry * 0.2;
+    ctx.strokeStyle = "rgba(255,255,255,0.12)";
     ctx.lineWidth = 1;
+    ctx.setLineDash([4, 6]);
     ctx.beginPath();
-    ctx.moveTo(cx - 15, cy);
-    ctx.lineTo(cx + 15, cy);
-    ctx.moveTo(cx, cy - 15);
-    ctx.lineTo(cx, cy + 15);
+    ctx.moveTo(cx - rx * 0.7, eyeY);
+    ctx.lineTo(cx + rx * 0.7, eyeY);
     ctx.stroke();
+    ctx.setLineDash([]);
 
-    // Rule of thirds
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    // Status text at bottom of guide
+    const fontSize = Math.max(14, Math.round(w * 0.028));
+    ctx.font = `600 ${fontSize}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+
+    // Text background pill
+    const textY = cy + ry + 20;
+    const textMetrics = ctx.measureText(statusText);
+    const pillW = textMetrics.width + 24;
+    const pillH = fontSize + 12;
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
     ctx.beginPath();
-    ctx.moveTo(w / 3, 0); ctx.lineTo(w / 3, h);
-    ctx.moveTo((2 * w) / 3, 0); ctx.lineTo((2 * w) / 3, h);
-    ctx.moveTo(0, h / 3); ctx.lineTo(w, h / 3);
-    ctx.moveTo(0, (2 * h) / 3); ctx.lineTo(w, (2 * h) / 3);
+    ctx.roundRect(cx - pillW / 2, textY - 2, pillW, pillH, pillH / 2);
+    ctx.fill();
+
+    ctx.fillStyle = guideColor;
+    ctx.fillText(statusText, cx, textY + 4);
+
+    // Shoulder guide line at bottom
+    const shoulderY = cy + ry + pillH + 30;
+    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(cx - rx * 1.8, shoulderY);
+    ctx.quadraticCurveTo(cx, shoulderY + 30, cx + rx * 1.8, shoulderY);
     ctx.stroke();
+    ctx.setLineDash([]);
   };
 
   const capturePhoto = () => {
