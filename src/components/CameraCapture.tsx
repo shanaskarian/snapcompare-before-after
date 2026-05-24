@@ -694,7 +694,7 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
                 position: "absolute", inset: 0,
                 width: "100%", height: "100%",
                 objectFit: "cover",
-                opacity: 0.12,
+                opacity: 0.25,
                 pointerEvents: "none",
                 borderRadius: "13px",
                 zIndex: 5,

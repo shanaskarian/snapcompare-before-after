@@ -317,6 +317,103 @@ export default function FaceAnalysis() {
     }
   }, [photo, detectFace]);
 
+  // ── Shared face tracker drawing (used by both live and static overlays) ──
+  // Key landmark indices for the tracker style:
+  // Ears: 234 (left tragus), 454 (right tragus)
+  // Eyes: 33 (left eye outer), 133 (left eye inner), 263 (right eye outer), 362 (right eye inner)
+  // Nose: 6 (bridge top), 4 (tip), 48 (left alar), 278 (right alar)
+  // Chin: 152 (chin center), 172 (left jaw low), 397 (right jaw low)
+  const drawFaceTracker = (
+    ctx: CanvasRenderingContext2D,
+    lms: LM[],
+    w: number,
+    h: number,
+    mirror: boolean
+  ) => {
+    const px = (i: number) => (mirror ? 1 - lms[i].x : lms[i].x) * w;
+    const py = (i: number) => lms[i].y * h;
+    const dotColor = "rgba(108, 99, 255, 0.85)";
+    const lineColor = "rgba(108, 99, 255, 0.5)";
+    const lipColor = "rgba(255, 100, 150, 0.7)";
+    const chinColor = "rgba(255, 255, 255, 0.5)";
+    const dotR = 4;
+
+    // Helper: draw a dot
+    const dot = (i: number) => {
+      ctx.beginPath();
+      ctx.arc(px(i), py(i), dotR, 0, Math.PI * 2);
+      ctx.fillStyle = dotColor;
+      ctx.fill();
+    };
+
+    // Helper: draw line between two landmarks
+    const line = (a: number, b: number, color: string, lw: number) => {
+      ctx.beginPath();
+      ctx.moveTo(px(a), py(a));
+      ctx.lineTo(px(b), py(b));
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lw;
+      ctx.stroke();
+    };
+
+    // Helper: draw a polyline through indices
+    const polyline = (indices: number[], color: string, lw: number, close = false) => {
+      if (indices.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(px(indices[0]), py(indices[0]));
+      for (let k = 1; k < indices.length; k++) {
+        ctx.lineTo(px(indices[k]), py(indices[k]));
+      }
+      if (close) ctx.closePath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lw;
+      ctx.stroke();
+    };
+
+    // ── Key points: ears, eyes, nose ──
+    const keyPoints = [
+      234, 454,           // ears (tragus)
+      33, 133, 263, 362,  // eye corners
+      6, 4, 48, 278,      // nose (bridge top, tip, left/right alar)
+    ];
+    keyPoints.forEach(dot);
+
+    // ── Connect: left ear → left eye outer → left eye inner → nose bridge ──
+    line(234, 33, lineColor, 1.5);
+    line(33, 133, lineColor, 1.5);
+    line(133, 6, lineColor, 1.5);
+
+    // ── Connect: right ear → right eye outer → right eye inner → nose bridge ──
+    line(454, 263, lineColor, 1.5);
+    line(263, 362, lineColor, 1.5);
+    line(362, 6, lineColor, 1.5);
+
+    // ── Nose: bridge → tip, tip → left alar, tip → right alar ──
+    line(6, 4, lineColor, 1.5);
+    line(4, 48, lineColor, 1.5);
+    line(4, 278, lineColor, 1.5);
+
+    // ── Iris dots ──
+    if (lms.length > 473) {
+      ctx.beginPath();
+      ctx.arc(px(468), py(468), 3, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(108, 99, 255, 0.7)";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(px(473), py(473), 3, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(108, 99, 255, 0.7)";
+      ctx.fill();
+    }
+
+    // ── Lip outline (outer contour, closed loop) ──
+    polyline(OUTER_LIP_CONTOUR, lipColor, 2, true);
+
+    // ── Chin line: jaw low left → chin center → jaw low right ──
+    // Use a smooth curve across several jaw landmarks
+    const chinLine = [172, 136, 150, 149, 176, 152, 400, 378, 379, 365, 397];
+    polyline(chinLine, chinColor, 1.5);
+  };
+
   // ── Draw face contours on the live camera canvas ──
   const drawLiveOverlay = useCallback(() => {
     const canvas = liveCanvasRef.current;
@@ -324,60 +421,9 @@ export default function FaceAnalysis() {
     const lms = liveLandmarksRef.current;
     if (!canvas || !video || !lms) return;
 
-    const w = canvas.width;
-    const h = canvas.height;
     const ctx = canvas.getContext("2d")!;
-    ctx.clearRect(0, 0, w, h);
-
-    // Mirror: the video is displayed with scaleX(-1), so we mirror the landmark x
-    const lx = (i: number) => (1 - lms[i].x) * w;
-    const ly = (i: number) => lms[i].y * h;
-
-    const drawContour = (indices: number[], color: string, lineWidth: number) => {
-      ctx.beginPath();
-      ctx.moveTo(lx(indices[0]), ly(indices[0]));
-      for (let k = 1; k < indices.length; k++) {
-        ctx.lineTo(lx(indices[k]), ly(indices[k]));
-      }
-      ctx.strokeStyle = color;
-      ctx.lineWidth = lineWidth;
-      ctx.stroke();
-    };
-
-    // Eye contours
-    drawContour(LEFT_EYE_CONTOUR, "rgba(255, 255, 255, 0.6)", 1.5);
-    drawContour(RIGHT_EYE_CONTOUR, "rgba(255, 255, 255, 0.6)", 1.5);
-
-    // Eyebrows
-    drawContour(LEFT_EYEBROW, "rgba(255, 255, 255, 0.4)", 1.5);
-    drawContour(RIGHT_EYEBROW, "rgba(255, 255, 255, 0.4)", 1.5);
-
-    // Nose bridge
-    drawContour(NOSE_BRIDGE, "rgba(255, 255, 255, 0.5)", 1.5);
-    // Nose tip dot
-    ctx.beginPath();
-    ctx.arc(lx(4), ly(4), 3, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-    ctx.fill();
-    // Nose wings
-    const noseWings = [219, 218, 237, 44, 1, 274, 457, 438, 439];
-    drawContour(noseWings, "rgba(255, 255, 255, 0.35)", 1);
-
-    // Lip outlines
-    drawContour(OUTER_LIP_CONTOUR, "rgba(255, 100, 150, 0.7)", 2);
-    drawContour(INNER_LIP_CONTOUR, "rgba(255, 100, 150, 0.45)", 1);
-
-    // Iris dots (refineLandmarks provides indices 468-477)
-    if (lms.length > 473) {
-      ctx.beginPath();
-      ctx.arc(lx(468), ly(468), 3, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(108, 99, 255, 0.7)";
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(lx(473), ly(473), 3, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(108, 99, 255, 0.7)";
-      ctx.fill();
-    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawFaceTracker(ctx, lms, canvas.width, canvas.height, true);
   }, []);
 
   // ── Live face detection loop ──
@@ -560,60 +606,8 @@ export default function FaceAnalysis() {
     const h = canvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    const lx = (i: number) => landmarks[i].x * w;
-    const ly = (i: number) => landmarks[i].y * h;
-
-    // ── Always draw facial feature outlines ──
-    // Eye contours
-    const drawContour = (indices: number[], color: string, lineWidth: number, fill = false) => {
-      ctx.beginPath();
-      ctx.moveTo(lx(indices[0]), ly(indices[0]));
-      for (let i = 1; i < indices.length; i++) {
-        ctx.lineTo(lx(indices[i]), ly(indices[i]));
-      }
-      if (fill) {
-        ctx.fillStyle = color;
-        ctx.fill();
-      } else {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = lineWidth;
-        ctx.stroke();
-      }
-    };
-
-    // Left eye outline
-    drawContour(LEFT_EYE_CONTOUR, "rgba(255, 255, 255, 0.5)", 1.5);
-    // Right eye outline
-    drawContour(RIGHT_EYE_CONTOUR, "rgba(255, 255, 255, 0.5)", 1.5);
-
-    // Eyebrows
-    drawContour(LEFT_EYEBROW, "rgba(255, 255, 255, 0.35)", 1.5);
-    drawContour(RIGHT_EYEBROW, "rgba(255, 255, 255, 0.35)", 1.5);
-
-    // Nose bridge
-    drawContour(NOSE_BRIDGE, "rgba(255, 255, 255, 0.4)", 1.5);
-    // Nose tip dot
-    ctx.beginPath();
-    ctx.arc(lx(4), ly(4), 3, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-    ctx.fill();
-    // Nose wings (nostrils outline)
-    const noseWings = [219, 218, 237, 44, 1, 274, 457, 438, 439];
-    drawContour(noseWings, "rgba(255, 255, 255, 0.3)", 1);
-
-    // Lip outlines
-    drawContour(OUTER_LIP_CONTOUR, "rgba(255, 100, 150, 0.6)", 2);
-    drawContour(INNER_LIP_CONTOUR, "rgba(255, 100, 150, 0.4)", 1);
-
-    // Iris dots
-    ctx.beginPath();
-    ctx.arc(lx(468), ly(468), 3, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(108, 99, 255, 0.6)";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(lx(473), ly(473), 3, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(108, 99, 255, 0.6)";
-    ctx.fill();
+    // Draw the face tracker (same style as live camera)
+    drawFaceTracker(ctx, landmarks, w, h, false);
 
     // ── Draw injection zone dots ──
     if (analysis) {
