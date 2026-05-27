@@ -279,6 +279,7 @@ export default function FaceAnalysis() {
   const [activeOverlays, setActiveOverlays] = useState<Set<string>>(new Set());
   const [landmarks, setLandmarks] = useState<LM[] | null>(null);
   const [detectingFace, setDetectingFace] = useState(false);
+  const [reportTab, setReportTab] = useState<"overview" | "treatments" | "plan">("overview");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -995,6 +996,33 @@ export default function FaceAnalysis() {
                 </div>
               )}
 
+              {/* Tab Navigation */}
+              <div style={{
+                display: "flex", gap: "4px",
+                background: "var(--cream)", borderRadius: "10px", padding: "4px",
+              }}>
+                {(["overview", "treatments", "plan"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setReportTab(tab)}
+                    style={{
+                      flex: 1, padding: "10px 16px", borderRadius: "8px", border: "none",
+                      cursor: "pointer", textTransform: "capitalize",
+                      fontFamily: "var(--font-display)", fontSize: "13px", fontWeight: 600,
+                      background: reportTab === tab ? "white" : "transparent",
+                      color: reportTab === tab ? "var(--purple)" : "var(--text-light)",
+                      boxShadow: reportTab === tab ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
+                      transition: "all 0.2s ease",
+                    }}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              {/* ═══ OVERVIEW TAB ═══ */}
+              {reportTab === "overview" && (<>
+
               {/* Demographics & Skin */}
               <div className="ai-panel">
                 <div className="ai-panel-header">
@@ -1139,6 +1167,41 @@ export default function FaceAnalysis() {
                 </div>
               )}
 
+              {/* AI Narrative (in Overview) */}
+              {analysis.narrative && (
+                <div className="ai-panel">
+                  <div className="ai-panel-header">
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontSize: "16px" }}>&#x1F4DD;</span>
+                      <span>Clinical Summary</span>
+                    </div>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(analysis.narrative || "")}
+                      style={{
+                        background: "none", border: "1px solid #e0e0e0", borderRadius: "6px",
+                        padding: "4px 10px", cursor: "pointer",
+                        fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-light)",
+                      }}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div className="ai-panel-body">
+                    <div style={{
+                      fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text)",
+                      lineHeight: 1.8, fontStyle: "italic",
+                    }}>
+                      {analysis.narrative}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              </>)}
+
+              {/* ═══ TREATMENTS TAB ═══ */}
+              {reportTab === "treatments" && (<>
+
               {/* Botox Suggestions */}
               <div className="ai-panel">
                 <div className="ai-panel-header">
@@ -1208,6 +1271,11 @@ export default function FaceAnalysis() {
                   ))}
                 </div>
               </div>
+
+              </>)}
+
+              {/* ═══ PLAN TAB ═══ */}
+              {reportTab === "plan" && (<>
 
               {/* Cost Estimate */}
               {analysis.costEstimate && (
@@ -1291,36 +1359,6 @@ export default function FaceAnalysis() {
                 </div>
               )}
 
-              {/* AI Narrative */}
-              {analysis.narrative && (
-                <div className="ai-panel">
-                  <div className="ai-panel-header">
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{ fontSize: "16px" }}>&#x1F4DD;</span>
-                      <span>Clinical Summary</span>
-                    </div>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(analysis.narrative || "")}
-                      style={{
-                        background: "none", border: "1px solid #e0e0e0", borderRadius: "6px",
-                        padding: "4px 10px", cursor: "pointer",
-                        fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-light)",
-                      }}
-                    >
-                      Copy
-                    </button>
-                  </div>
-                  <div className="ai-panel-body">
-                    <div style={{
-                      fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text)",
-                      lineHeight: 1.8, fontStyle: "italic",
-                    }}>
-                      {analysis.narrative}
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Summary */}
               <div className="ai-panel">
                 <div className="ai-panel-header">
@@ -1367,6 +1405,8 @@ export default function FaceAnalysis() {
                   </div>
                 </div>
               </div>
+
+              </>)}
             </>
           )}
         </div>

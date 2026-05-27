@@ -3,79 +3,125 @@
 import { useState } from "react";
 import CameraCapture, { type FaceNodes } from "@/components/CameraCapture";
 import ComparisonSlider from "@/components/ComparisonSlider";
-import SessionManager, { type PhotoSession } from "@/components/SessionManager";
+import SessionManager, {
+  ClientProfileView,
+  type ClientProfile,
+  type TreatmentSession,
+  createTreatmentSession,
+} from "@/components/SessionManager";
 import AIAnalysis from "@/components/AIAnalysis";
 import FaceAnalysis from "@/components/FaceAnalysis";
 
-type AppView = "capture" | "compare" | "sessions" | "analyze";
+type AppView = "clients" | "profile" | "capture" | "compare" | "analyze";
 
 export default function AppPage() {
-  const [view, setView] = useState<AppView>("sessions");
-  const [currentSession, setCurrentSession] = useState<PhotoSession | null>(null);
+  const [view, setView] = useState<AppView>("clients");
+  const [currentClient, setCurrentClient] = useState<ClientProfile | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [captureMode, setCaptureMode] = useState<"before" | "after">("before");
-  const [isRetaking, setIsRetaking] = useState(false);
 
-  const handlePhotoCapture = (photoDataUrl: string, landmarks: FaceNodes | null) => {
-    if (!currentSession) return;
-    const updated = { ...currentSession };
-    if (captureMode === "before") {
-      updated.beforePhoto = photoDataUrl;
-      updated.beforeLandmarks = landmarks;
-    } else {
-      updated.afterPhoto = photoDataUrl;
-    }
-    setCurrentSession(updated);
-    saveSession(updated);
+  // ── Persistence ──
 
-    if (isRetaking) {
-      // Return to compare view after retaking a single photo
-      setIsRetaking(false);
-      setView("compare");
-    } else if (captureMode === "before") {
-      // Normal flow: advance to after capture
-      setCaptureMode("after");
-    } else {
-      // Normal flow: both photos done, go to compare
-      setView("compare");
-    }
+  const saveClient = (client: ClientProfile) => {
+    const clients = JSON.parse(localStorage.getItem("ba-clients") || "[]") as ClientProfile[];
+    const idx = clients.findIndex((c) => c.id === client.id);
+    if (idx >= 0) clients[idx] = client;
+    else clients.unshift(client);
+    localStorage.setItem("ba-clients", JSON.stringify(clients));
   };
 
-  const saveSession = (session: PhotoSession) => {
-    const sessions = JSON.parse(localStorage.getItem("ba-sessions") || "[]") as PhotoSession[];
-    const idx = sessions.findIndex((s) => s.id === session.id);
-    if (idx >= 0) sessions[idx] = session;
-    else sessions.unshift(session);
-    localStorage.setItem("ba-sessions", JSON.stringify(sessions));
+  // ── Active session helper ──
+
+  const getActiveSession = (): TreatmentSession | null => {
+    if (!currentClient || !activeSessionId) return null;
+    return currentClient.sessions.find((s) => s.id === activeSessionId) || null;
   };
 
-  const startNewSession = (patientName: string) => {
-    const session: PhotoSession = {
-      id: Date.now().toString(),
-      patientName,
-      createdAt: new Date().toISOString(),
-      beforePhoto: null,
-      afterPhoto: null,
-      aiAnalysis: null,
-      beforeLandmarks: null,
+  const updateSession = (sessionId: string, updater: (s: TreatmentSession) => TreatmentSession) => {
+    if (!currentClient) return;
+    const updated = {
+      ...currentClient,
+      sessions: currentClient.sessions.map((s) => s.id === sessionId ? updater(s) : s),
     };
-    setCurrentSession(session);
+    setCurrentClient(updated);
+    saveClient(updated);
+  };
+
+  // ── Handlers ──
+
+  const handleNewClient = (name: string) => {
+    const session = createTreatmentSession();
+    const client: ClientProfile = {
+      id: Date.now().toString(),
+      patientName: name,
+      createdAt: new Date().toISOString(),
+      sessions: [session],
+    };
+    setCurrentClient(client);
+    setActiveSessionId(session.id);
     setCaptureMode("before");
     setView("capture");
-    saveSession(session);
+    saveClient(client);
   };
 
-  const loadSession = (session: PhotoSession) => {
-    setCurrentSession(session);
-    if (session.beforePhoto && session.afterPhoto) setView("compare");
-    else if (session.beforePhoto) { setCaptureMode("after"); setView("capture"); }
-    else { setCaptureMode("before"); setView("capture"); }
+  const handleOpenClient = (client: ClientProfile) => {
+    setCurrentClient(client);
+    setActiveSessionId(null);
+    setView("profile");
+  };
+
+  const handleUpdateClient = (client: ClientProfile) => {
+    setCurrentClient(client);
+    saveClient(client);
+  };
+
+  const handleCaptureBeforePhoto = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    setCaptureMode("before");
+    setView("capture");
+  };
+
+  const handleCaptureAfterPhoto = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    setCaptureMode("after");
+    setView("capture");
+  };
+
+  const handleViewComparison = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    setView("compare");
+  };
+
+  const handlePhotoCapture = (photoDataUrl: string, landmarks: FaceNodes | null) => {
+    if (!currentClient || !activeSessionId) return;
+
+    updateSession(activeSessionId, (s) => {
+      if (captureMode === "before") {
+        return {
+          ...s,
+          beforePhoto: photoDataUrl,
+          beforeDate: new Date().toISOString(),
+          beforeLandmarks: landmarks,
+        };
+      } else {
+        return {
+          ...s,
+          afterPhoto: photoDataUrl,
+          afterDate: new Date().toISOString(),
+        };
+      }
+    });
+
+    // After capturing, go back to the client profile view
+    setView("profile");
   };
 
   const retakePhoto = (mode: "before" | "after") => {
     setCaptureMode(mode);
-    setIsRetaking(true);
     setView("capture");
   };
+
+  const activeSession = getActiveSession();
 
   return (
     <div className="app-page min-h-screen flex flex-col">
@@ -96,10 +142,10 @@ export default function AppPage() {
               <div style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "rgba(255,255,255,0.4)", letterSpacing: "1px" }}>PHOTO STUDIO</div>
             </div>
           </a>
-          {currentSession && (
+          {currentClient && (
             <div className="app-patient-info">
-              <div className="app-patient-name">{currentSession.patientName}</div>
-              <div className="app-patient-date">{new Date(currentSession.createdAt).toLocaleDateString()}</div>
+              <div className="app-patient-name">{currentClient.patientName}</div>
+              <div className="app-patient-date">{new Date(currentClient.createdAt).toLocaleDateString()}</div>
             </div>
           )}
         </div>
@@ -109,21 +155,21 @@ export default function AppPage() {
       <div style={{ background: "var(--cream)", borderBottom: "2px solid var(--ink)" }}>
         <nav className="app-nav">
           <button
-            onClick={() => setView("sessions")}
-            className={`app-nav-btn ${view === "sessions" ? "active" : ""}`}
+            onClick={() => { setView("clients"); setCurrentClient(null); setActiveSessionId(null); }}
+            className={`app-nav-btn ${view === "clients" ? "active" : ""}`}
           >
-            Sessions
+            Clients
           </button>
           <button
-            onClick={() => currentSession && setView("capture")}
-            disabled={!currentSession}
-            className={`app-nav-btn ${view === "capture" ? "active" : ""}`}
+            onClick={() => currentClient && setView("profile")}
+            disabled={!currentClient}
+            className={`app-nav-btn ${view === "profile" || view === "capture" ? "active" : ""}`}
           >
-            Capture
+            Profile
           </button>
           <button
-            onClick={() => currentSession?.beforePhoto && currentSession?.afterPhoto && setView("compare")}
-            disabled={!currentSession?.beforePhoto || !currentSession?.afterPhoto}
+            onClick={() => activeSession?.beforePhoto && activeSession?.afterPhoto && setView("compare")}
+            disabled={!activeSession?.beforePhoto || !activeSession?.afterPhoto}
             className={`app-nav-btn ${view === "compare" ? "active" : ""}`}
           >
             Compare
@@ -139,12 +185,51 @@ export default function AppPage() {
 
       {/* Main */}
       <main className="flex-1 overflow-auto">
-        {view === "sessions" && <SessionManager onNewSession={startNewSession} onLoadSession={loadSession} />}
-        {view === "capture" && currentSession && <CameraCapture mode={captureMode} existingBefore={currentSession.beforePhoto} beforeLandmarks={currentSession.beforeLandmarks ?? null} onCapture={handlePhotoCapture} />}
-        {view === "compare" && currentSession?.beforePhoto && currentSession?.afterPhoto && (
+        {/* Client list */}
+        {view === "clients" && (
+          <SessionManager onNewClient={handleNewClient} onOpenClient={handleOpenClient} />
+        )}
+
+        {/* Client profile with treatment sessions */}
+        {view === "profile" && currentClient && (
+          <ClientProfileView
+            client={currentClient}
+            onBack={() => { setView("clients"); setCurrentClient(null); }}
+            onCaptureBeforePhoto={handleCaptureBeforePhoto}
+            onCaptureAfterPhoto={handleCaptureAfterPhoto}
+            onViewComparison={handleViewComparison}
+            onUpdateClient={handleUpdateClient}
+          />
+        )}
+
+        {/* Camera capture */}
+        {view === "capture" && currentClient && activeSessionId && (
+          <CameraCapture
+            mode={captureMode}
+            existingBefore={activeSession?.beforePhoto || null}
+            beforeLandmarks={activeSession?.beforeLandmarks ?? null}
+            onCapture={handlePhotoCapture}
+          />
+        )}
+
+        {/* Comparison + AI analysis */}
+        {view === "compare" && activeSession?.beforePhoto && activeSession?.afterPhoto && (
           <div style={{ padding: "24px", maxWidth: "800px", margin: "0 auto" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-              <ComparisonSlider beforeSrc={currentSession.beforePhoto} afterSrc={currentSession.afterPhoto} />
+              {/* Date stamps */}
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "0 4px" }}>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-light)" }}>
+                  <span style={{ fontWeight: 600, color: "var(--purple)" }}>Before:</span>{" "}
+                  {activeSession.beforeDate ? new Date(activeSession.beforeDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
+                </div>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-light)" }}>
+                  <span style={{ fontWeight: 600, color: "var(--green)" }}>After:</span>{" "}
+                  {activeSession.afterDate ? new Date(activeSession.afterDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
+                </div>
+              </div>
+
+              <ComparisonSlider beforeSrc={activeSession.beforePhoto} afterSrc={activeSession.afterPhoto} />
+
               <div style={{ display: "flex", gap: "12px" }}>
                 <button onClick={() => retakePhoto("before")} className="app-btn-secondary" style={{ flex: 1 }}>
                   Retake Before
@@ -153,21 +238,33 @@ export default function AppPage() {
                   Retake After
                 </button>
               </div>
-              <AIAnalysis beforePhoto={currentSession.beforePhoto} afterPhoto={currentSession.afterPhoto} cachedAnalysis={currentSession.aiAnalysis} onAnalysisComplete={(analysis) => { const updated = { ...currentSession, aiAnalysis: analysis }; setCurrentSession(updated); saveSession(updated); }} />
+
+              <AIAnalysis
+                beforePhoto={activeSession.beforePhoto}
+                afterPhoto={activeSession.afterPhoto}
+                cachedAnalysis={activeSession.aiAnalysis}
+                onAnalysisComplete={(analysis) => {
+                  updateSession(activeSessionId!, (s) => ({ ...s, aiAnalysis: analysis }));
+                }}
+              />
             </div>
           </div>
         )}
+
+        {/* Face Analysis (single photo) */}
         {view === "analyze" && <FaceAnalysis />}
-        {view === "capture" && !currentSession && (
+
+        {/* Capture with no client */}
+        {view === "capture" && !currentClient && (
           <div className="empty-state">
             <svg className="empty-state-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            <h2 className="empty-state-title">No Active Session</h2>
-            <p className="empty-state-desc" style={{ marginBottom: "24px" }}>Start a new session to begin capturing photos.</p>
-            <button onClick={() => setView("sessions")} className="app-btn-primary">
-              Go to Sessions
+            <h2 className="empty-state-title">No Active Client</h2>
+            <p className="empty-state-desc" style={{ marginBottom: "24px" }}>Open a client profile to start capturing photos.</p>
+            <button onClick={() => setView("clients")} className="app-btn-primary">
+              Go to Clients
             </button>
           </div>
         )}
