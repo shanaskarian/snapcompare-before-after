@@ -9,6 +9,7 @@ interface BotoxArea {
   units: string;
   points: number;
   notes: string;
+  estimatedCost?: string;
 }
 
 interface FillerArea {
@@ -19,6 +20,16 @@ interface FillerArea {
   pointsPerSide?: number;
   points?: number;
   notes: string;
+  estimatedCost?: string;
+}
+
+interface SkinHealthScores {
+  hydration: number;
+  elasticity: number;
+  texture: number;
+  toneEvenness: number;
+  radiance: number;
+  clarity: number;
 }
 
 interface AnalysisResult {
@@ -26,11 +37,24 @@ interface AnalysisResult {
     estimatedAgeRange: string;
     apparentGender: string;
   };
+  symmetry?: {
+    score: number;
+    leftRightDeviation: number;
+    thirdRatios: { upper: number; middle: number; lower: number };
+    notes: string;
+  };
+  skinHealth?: SkinHealthScores;
   skinAssessment: {
     qualityScore: number;
     texture: string;
     tone: string;
     agingSigns: string;
+  };
+  agingAssessment?: {
+    biologicalVsChronological: string;
+    agingScore: number;
+    keyIndicators: string[];
+    earliestAgingAreas: string[];
   };
   botox: {
     forehead: BotoxArea;
@@ -47,10 +71,21 @@ interface AnalysisResult {
     temples: FillerArea;
     tearTroughs: FillerArea;
   };
+  costEstimate?: {
+    totalBotoxCost: string;
+    totalFillerCost: string;
+    grandTotal: string;
+  };
+  treatmentTimeline?: {
+    recommendedOrder: Array<{ step: number; treatment: string; timeframe: string }>;
+    maintenanceSchedule: string;
+  };
+  narrative?: string;
   summary: {
     topTreatments: string[];
     totalBotoxUnits: string;
     totalFillerSyringes: string;
+    overallScore?: number;
     disclaimer: string;
   };
 }
@@ -923,6 +958,43 @@ export default function FaceAnalysis() {
           {/* Analysis Results */}
           {analysis && (
             <>
+              {/* Hero Score Card */}
+              {analysis.summary.overallScore != null && (
+                <div className="ai-panel" style={{ overflow: "hidden" }}>
+                  <div style={{
+                    background: `linear-gradient(135deg, ${analysis.summary.overallScore >= 75 ? "var(--green)" : analysis.summary.overallScore >= 50 ? "var(--yellow-check)" : "var(--coral)"}15, transparent)`,
+                    padding: "24px 20px",
+                    display: "flex", alignItems: "center", gap: "20px",
+                  }}>
+                    <div style={{ position: "relative", width: "80px", height: "80px", flexShrink: 0 }}>
+                      <svg viewBox="0 0 80 80" style={{ width: "80px", height: "80px", transform: "rotate(-90deg)" }}>
+                        <circle cx="40" cy="40" r="34" fill="none" stroke="#eee" strokeWidth="6" />
+                        <circle cx="40" cy="40" r="34" fill="none"
+                          stroke={analysis.summary.overallScore >= 75 ? "var(--green)" : analysis.summary.overallScore >= 50 ? "var(--yellow-check)" : "var(--coral)"}
+                          strokeWidth="6"
+                          strokeDasharray={`${(analysis.summary.overallScore / 100) * 213.6} 213.6`}
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                        <span style={{ fontFamily: "var(--font-display)", fontSize: "24px", fontWeight: 700, color: analysis.summary.overallScore >= 75 ? "var(--green)" : analysis.summary.overallScore >= 50 ? "var(--yellow-check)" : "var(--coral)", lineHeight: 1 }}>
+                          {analysis.summary.overallScore}
+                        </span>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-light)", textTransform: "uppercase", letterSpacing: "1px" }}>/100</span>
+                      </div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: "var(--font-display)", fontSize: "18px", color: "var(--ink)", marginBottom: "4px" }}>
+                        Overall Assessment Score
+                      </div>
+                      <div style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-light)", lineHeight: 1.6 }}>
+                        Comprehensive facial aesthetics evaluation based on skin health, symmetry, and treatment potential
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Demographics & Skin */}
               <div className="ai-panel">
                 <div className="ai-panel-header">
@@ -966,6 +1038,107 @@ export default function FaceAnalysis() {
                 </div>
               </div>
 
+              {/* Symmetry Analysis */}
+              {analysis.symmetry && (
+                <div className="ai-panel">
+                  <div className="ai-panel-header">
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontSize: "16px" }}>&#x1F50D;</span>
+                      <span>Facial Symmetry</span>
+                    </div>
+                    <span className="app-badge" style={{
+                      background: (analysis.symmetry.score >= 80 ? "var(--green)" : analysis.symmetry.score >= 60 ? "var(--yellow-check)" : "var(--coral)") + "20",
+                      color: analysis.symmetry.score >= 80 ? "var(--green)" : analysis.symmetry.score >= 60 ? "var(--yellow-check)" : "var(--coral)"
+                    }}>
+                      {analysis.symmetry.score}/100
+                    </span>
+                  </div>
+                  <div className="ai-panel-body">
+                    <div style={{ display: "flex", gap: "12px", marginBottom: "12px" }}>
+                      <div style={{ flex: 1, textAlign: "center", padding: "12px", background: "var(--cream)", borderRadius: "10px" }}>
+                        <div style={{ fontFamily: "var(--font-display)", fontSize: "20px", color: analysis.symmetry.leftRightDeviation <= 5 ? "var(--green)" : "var(--coral)" }}>
+                          {analysis.symmetry.leftRightDeviation}%
+                        </div>
+                        <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-light)", textTransform: "uppercase", letterSpacing: "1px" }}>
+                          L/R Deviation
+                        </div>
+                      </div>
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px", justifyContent: "center" }}>
+                        {(["upper", "middle", "lower"] as const).map((third) => (
+                          <div key={third} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-light)", width: "48px", textTransform: "capitalize" }}>
+                              {third}
+                            </span>
+                            <div style={{ flex: 1, height: "5px", borderRadius: "3px", background: "#eee" }}>
+                              <div style={{ width: `${analysis.symmetry!.thirdRatios[third]}%`, height: "5px", borderRadius: "3px", background: "var(--purple)" }} />
+                            </div>
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--ink)", fontWeight: 600, minWidth: "28px", textAlign: "right" }}>
+                              {analysis.symmetry!.thirdRatios[third]}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {analysis.symmetry.notes && (
+                      <div style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-light)", lineHeight: 1.6 }}>
+                        {analysis.symmetry.notes}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Skin Health Radar */}
+              {analysis.skinHealth && <FaceSkinRadar skinHealth={analysis.skinHealth} />}
+
+              {/* Aging Assessment */}
+              {analysis.agingAssessment && (
+                <div className="ai-panel">
+                  <div className="ai-panel-header">
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontSize: "16px" }}>&#x23F3;</span>
+                      <span>Aging Assessment</span>
+                    </div>
+                    <span className="app-badge" style={{
+                      background: (analysis.agingAssessment.agingScore >= 8 ? "var(--green)" : analysis.agingAssessment.agingScore >= 5 ? "var(--yellow-check)" : "var(--coral)") + "20",
+                      color: analysis.agingAssessment.agingScore >= 8 ? "var(--green)" : analysis.agingAssessment.agingScore >= 5 ? "var(--yellow-check)" : "var(--coral)"
+                    }}>
+                      {analysis.agingAssessment.agingScore}/10
+                    </span>
+                  </div>
+                  <div className="ai-panel-body">
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text)", lineHeight: 1.7, marginBottom: "12px" }}>
+                      {analysis.agingAssessment.biologicalVsChronological}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
+                      {analysis.agingAssessment.keyIndicators.map((ind, i) => (
+                        <span key={i} style={{
+                          fontFamily: "var(--font-mono)", fontSize: "10px",
+                          background: "var(--coral)18", color: "var(--coral)",
+                          padding: "3px 10px", borderRadius: "4px",
+                        }}>
+                          {ind}
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-light)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "6px" }}>
+                      Earliest Aging Areas
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                      {analysis.agingAssessment.earliestAgingAreas.map((area, i) => (
+                        <span key={i} style={{
+                          fontFamily: "var(--font-mono)", fontSize: "10px",
+                          background: "var(--purple)18", color: "var(--purple)",
+                          padding: "3px 10px", borderRadius: "4px",
+                        }}>
+                          {area}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Botox Suggestions */}
               <div className="ai-panel">
                 <div className="ai-panel-header">
@@ -991,6 +1164,7 @@ export default function FaceAnalysis() {
                       amount={area.units + " units"}
                       points={area.points}
                       notes={area.notes}
+                      estimatedCost={area.estimatedCost}
                       active={activeOverlays.has(key)}
                       onToggle={() => toggleOverlay(key)}
                       severityColor={severityColor}
@@ -1025,6 +1199,7 @@ export default function FaceAnalysis() {
                       amount={area.syringes + " syringe(s)"}
                       points={(area.pointsPerSide ? area.pointsPerSide + "/side" : area.points?.toString()) || "0"}
                       notes={area.notes}
+                      estimatedCost={area.estimatedCost}
                       active={activeOverlays.has(key)}
                       onToggle={() => toggleOverlay(key)}
                       severityColor={severityColor}
@@ -1033,6 +1208,118 @@ export default function FaceAnalysis() {
                   ))}
                 </div>
               </div>
+
+              {/* Cost Estimate */}
+              {analysis.costEstimate && (
+                <div className="ai-panel">
+                  <div className="ai-panel-header">
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontSize: "16px" }}>&#x1F4B0;</span>
+                      <span>Estimated Cost</span>
+                    </div>
+                  </div>
+                  <div className="ai-panel-body">
+                    <div style={{ textAlign: "center", padding: "16px", background: "var(--cream)", borderRadius: "10px", marginBottom: "12px" }}>
+                      <div style={{ fontFamily: "var(--font-display)", fontSize: "24px", color: "var(--purple)" }}>
+                        {analysis.costEstimate.grandTotal}
+                      </div>
+                      <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-light)", textTransform: "uppercase", letterSpacing: "1px", marginTop: "4px" }}>
+                        Estimated Total Treatment Cost
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "12px" }}>
+                      <div style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #eee", textAlign: "center" }}>
+                        <div style={{ fontFamily: "var(--font-mono)", fontSize: "14px", fontWeight: 600, color: "var(--coral)" }}>
+                          {analysis.costEstimate.totalBotoxCost}
+                        </div>
+                        <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-light)", textTransform: "uppercase" }}>Botox</div>
+                      </div>
+                      <div style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #eee", textAlign: "center" }}>
+                        <div style={{ fontFamily: "var(--font-mono)", fontSize: "14px", fontWeight: 600, color: "var(--purple)" }}>
+                          {analysis.costEstimate.totalFillerCost}
+                        </div>
+                        <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-light)", textTransform: "uppercase" }}>Filler</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Treatment Timeline */}
+              {analysis.treatmentTimeline && (
+                <div className="ai-panel">
+                  <div className="ai-panel-header">
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontSize: "16px" }}>&#x1F4C5;</span>
+                      <span>Treatment Timeline</span>
+                    </div>
+                  </div>
+                  <div className="ai-panel-body">
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
+                      {analysis.treatmentTimeline.recommendedOrder.map((step, i) => (
+                        <div key={i} style={{
+                          display: "flex", alignItems: "center", gap: "12px",
+                          padding: "10px 12px", borderRadius: "10px", border: "1px solid #eee",
+                        }}>
+                          <span style={{
+                            width: "26px", height: "26px", borderRadius: "50%",
+                            background: "var(--purple)", color: "white",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 700, flexShrink: 0,
+                          }}>
+                            {step.step}
+                          </span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontFamily: "var(--font-display)", fontSize: "13px", color: "var(--ink)" }}>
+                              {step.treatment}
+                            </div>
+                          </div>
+                          <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-light)" }}>
+                            {step.timeframe}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{
+                      padding: "10px 14px", borderRadius: "8px",
+                      background: "var(--cream)",
+                      fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text)", lineHeight: 1.6,
+                    }}>
+                      <strong>Maintenance:</strong> {analysis.treatmentTimeline.maintenanceSchedule}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* AI Narrative */}
+              {analysis.narrative && (
+                <div className="ai-panel">
+                  <div className="ai-panel-header">
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontSize: "16px" }}>&#x1F4DD;</span>
+                      <span>Clinical Summary</span>
+                    </div>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(analysis.narrative || "")}
+                      style={{
+                        background: "none", border: "1px solid #e0e0e0", borderRadius: "6px",
+                        padding: "4px 10px", cursor: "pointer",
+                        fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-light)",
+                      }}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div className="ai-panel-body">
+                    <div style={{
+                      fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text)",
+                      lineHeight: 1.8, fontStyle: "italic",
+                    }}>
+                      {analysis.narrative}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Summary */}
               <div className="ai-panel">
@@ -1094,13 +1381,87 @@ function skinScoreColor(score: number): string {
   return "var(--coral)";
 }
 
+function FaceSkinRadar({ skinHealth }: { skinHealth: SkinHealthScores }) {
+  const dimensions: (keyof SkinHealthScores)[] = ["hydration", "elasticity", "texture", "toneEvenness", "radiance", "clarity"];
+  const labels: Record<string, string> = {
+    hydration: "Hydration", elasticity: "Elasticity", texture: "Texture",
+    toneEvenness: "Tone", radiance: "Radiance", clarity: "Clarity",
+  };
+
+  const cx = 100, cy = 100, r = 70;
+  const angleStep = (2 * Math.PI) / dimensions.length;
+
+  const getPoint = (dim: keyof SkinHealthScores): [number, number] => {
+    const i = dimensions.indexOf(dim);
+    const angle = i * angleStep - Math.PI / 2;
+    const val = (skinHealth[dim] / 10) * r;
+    return [cx + val * Math.cos(angle), cy + val * Math.sin(angle)];
+  };
+
+  const polygon = dimensions.map((d) => getPoint(d).join(",")).join(" ");
+  const gridLevels = [0.25, 0.5, 0.75, 1];
+  const avg = Math.round(dimensions.reduce((sum, d) => sum + skinHealth[d], 0) / dimensions.length * 10) / 10;
+
+  return (
+    <div className="ai-panel">
+      <div className="ai-panel-header">
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "16px" }}>&#x1F31F;</span>
+          <span>Skin Health Radar</span>
+        </div>
+        <span className="app-badge app-badge-purple">avg {avg}/10</span>
+      </div>
+      <div className="ai-panel-body" style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <svg viewBox="0 0 200 200" style={{ width: "100%", maxWidth: "260px" }}>
+          {gridLevels.map((level) => (
+            <polygon key={level}
+              points={dimensions.map((_, i) => {
+                const angle = i * angleStep - Math.PI / 2;
+                const dist = level * r;
+                return `${cx + dist * Math.cos(angle)},${cy + dist * Math.sin(angle)}`;
+              }).join(" ")}
+              fill="none" stroke="#e0e0e0" strokeWidth="0.5"
+            />
+          ))}
+          {dimensions.map((_, i) => {
+            const angle = i * angleStep - Math.PI / 2;
+            return <line key={i} x1={cx} y1={cy} x2={cx + r * Math.cos(angle)} y2={cy + r * Math.sin(angle)} stroke="#e0e0e0" strokeWidth="0.5" />;
+          })}
+          <polygon points={polygon} fill="rgba(108,99,255,0.15)" stroke="#6C63FF" strokeWidth="1.5" />
+          {dimensions.map((dim) => {
+            const [px, py] = getPoint(dim);
+            return <circle key={dim} cx={px} cy={py} r="3" fill="#6C63FF" />;
+          })}
+          {dimensions.map((dim, i) => {
+            const angle = i * angleStep - Math.PI / 2;
+            const lx = cx + (r + 18) * Math.cos(angle);
+            const ly = cy + (r + 18) * Math.sin(angle);
+            return <text key={dim} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle" fontSize="8" fill="#888" fontFamily="var(--font-mono)">{labels[dim]}</text>;
+          })}
+        </svg>
+        <div style={{ width: "100%", marginTop: "8px" }}>
+          {dimensions.map((dim) => (
+            <div key={dim} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "5px 0", borderBottom: "1px solid #f0f0f0" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-light)", flex: 1 }}>{labels[dim]}</span>
+              <div style={{ width: "80px", height: "5px", borderRadius: "3px", background: "#eee" }}>
+                <div style={{ width: `${skinHealth[dim] * 10}%`, height: "5px", borderRadius: "3px", background: skinHealth[dim] >= 7 ? "var(--green)" : skinHealth[dim] >= 4 ? "var(--yellow-check)" : "var(--coral)" }} />
+              </div>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--purple)", fontWeight: 600, width: "24px", textAlign: "right" }}>{skinHealth[dim]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ZoneCard({
-  zoneKey, label, color, type, severity, suggest, confidence, amount, points, notes, active, onToggle,
+  zoneKey, label, color, type, severity, suggest, confidence, amount, points, notes, estimatedCost, active, onToggle,
   severityColor, confidenceBadge,
 }: {
   zoneKey: string; label: string; color: string; type: string;
   severity: string; suggest: boolean; confidence: string; amount: string;
-  points: number | string; notes: string; active: boolean;
+  points: number | string; notes: string; estimatedCost?: string; active: boolean;
   onToggle: () => void;
   severityColor: (s: string) => string;
   confidenceBadge: (c: string) => string;
@@ -1167,9 +1528,12 @@ function ZoneCard({
           fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-light)",
           lineHeight: 1.6,
         }}>
-          <div style={{ display: "flex", gap: "16px", marginBottom: "6px" }}>
+          <div style={{ display: "flex", gap: "16px", marginBottom: "6px", flexWrap: "wrap" }}>
             <span><strong style={{ color: "var(--ink)" }}>{amount}</strong></span>
             <span><strong style={{ color: "var(--ink)" }}>{points}</strong> point(s)</span>
+            {estimatedCost && estimatedCost !== "$0" && (
+              <span style={{ color: "var(--green)", fontWeight: 600 }}>{estimatedCost}</span>
+            )}
           </div>
           <p>{notes}</p>
         </div>
