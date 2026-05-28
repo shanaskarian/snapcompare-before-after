@@ -70,6 +70,8 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
   const [showGuide, setShowGuide] = useState(true);
   const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
   const [meshLoading, setMeshLoading] = useState(true);
+  const [distanceStatus, setDistanceStatus] = useState<"too-close" | "good" | "too-far" | null>(null);
+  const [lightingScore, setLightingScore] = useState<number | null>(null);
 
   // Keep refs in sync
   useEffect(() => { modeRef.current = mode; }, [mode]);
@@ -216,6 +218,19 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
     let nodes = extractNodes(landmarks);
     nodes = analyzeBrightness(nodes);
     currentLandmarksRef.current = nodes;
+
+    // ── Distance indicator (from interEyeDist) ──
+    const ied = nodes.interEyeDist;
+    if (ied < 0.08) setDistanceStatus("too-far");
+    else if (ied > 0.22) setDistanceStatus("too-close");
+    else setDistanceStatus("good");
+
+    // ── Lighting balance score 0-100 ──
+    const lb = nodes.leftBrightness;
+    const rb = nodes.rightBrightness;
+    const maxB = Math.max(lb, rb, 1);
+    const balanceScore = Math.round(100 - (Math.abs(lb - rb) / maxB) * 100);
+    setLightingScore(balanceScore);
 
     const curMode = modeRef.current;
     const curBeforeLandmarks = beforeLandmarksRef.current;
@@ -828,6 +843,75 @@ export default function CameraCapture({ mode, existingBefore, beforeLandmarks, o
               </>
             )}
           </div>
+
+          {/* Distance & Lighting gauges */}
+          {faceDetected && (
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              {/* Distance indicator */}
+              <div style={{
+                flex: 1, minWidth: "140px",
+                background: "rgba(0,0,0,0.04)", borderRadius: "10px",
+                padding: "10px 14px", border: "2px solid var(--ink)",
+                display: "flex", flexDirection: "column", gap: "6px"
+              }}>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-light)" }}>
+                  Distance
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{
+                    flex: 1, height: "6px", borderRadius: "3px",
+                    background: "rgba(0,0,0,0.08)", overflow: "hidden", position: "relative"
+                  }}>
+                    <div style={{
+                      position: "absolute",
+                      left: distanceStatus === "too-far" ? "0%" : distanceStatus === "good" ? "33%" : "66%",
+                      width: "34%", height: "100%", borderRadius: "3px",
+                      background: distanceStatus === "good" ? "var(--green)" : "var(--coral)",
+                      transition: "left 0.3s ease, background 0.3s ease"
+                    }} />
+                  </div>
+                  <span style={{
+                    fontFamily: "var(--font-mono)", fontSize: "11px", fontWeight: 600,
+                    color: distanceStatus === "good" ? "var(--green)" : "var(--coral)",
+                    minWidth: "60px", textAlign: "right"
+                  }}>
+                    {distanceStatus === "too-close" ? "Too Close" : distanceStatus === "too-far" ? "Too Far" : "Good"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Lighting score */}
+              <div style={{
+                flex: 1, minWidth: "140px",
+                background: "rgba(0,0,0,0.04)", borderRadius: "10px",
+                padding: "10px 14px", border: "2px solid var(--ink)",
+                display: "flex", flexDirection: "column", gap: "6px"
+              }}>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-light)" }}>
+                  Lighting Balance
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{
+                    flex: 1, height: "6px", borderRadius: "3px",
+                    background: "rgba(0,0,0,0.08)", overflow: "hidden"
+                  }}>
+                    <div style={{
+                      width: `${lightingScore ?? 0}%`, height: "100%", borderRadius: "3px",
+                      background: (lightingScore ?? 0) >= 70 ? "var(--green)" : (lightingScore ?? 0) >= 40 ? "var(--coral)" : "#EF4444",
+                      transition: "width 0.3s ease, background 0.3s ease"
+                    }} />
+                  </div>
+                  <span style={{
+                    fontFamily: "var(--font-mono)", fontSize: "13px", fontWeight: 700,
+                    color: (lightingScore ?? 0) >= 70 ? "var(--green)" : (lightingScore ?? 0) >= 40 ? "var(--coral)" : "#EF4444",
+                    minWidth: "36px", textAlign: "right"
+                  }}>
+                    {lightingScore ?? "—"}<span style={{ fontSize: "10px", fontWeight: 500 }}>/100</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Capture button */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "8px" }}>
